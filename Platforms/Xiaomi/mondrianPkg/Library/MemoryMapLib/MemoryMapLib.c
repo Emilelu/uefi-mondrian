@@ -9,7 +9,7 @@ gMemoryDescriptor[] = {
 
   // DDR Regions —— K60 运行时保留区（实测）+ UEFI 系统区
   {"hyp_region",         0x80000000, 0x00600000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
-  {"xbl_dtlog_region",   0x80600000, 0x00040000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
+  {"DT BLOB",          0x80600000, 0x00040000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"aop_image_region",   0x80800000, 0x00060000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"aop_cmd_db_region",  0x80860000, 0x00020000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"aop_config_region",  0x80880000, 0x00020000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
