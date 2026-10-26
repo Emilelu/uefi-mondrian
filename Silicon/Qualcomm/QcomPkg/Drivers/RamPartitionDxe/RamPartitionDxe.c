@@ -18,6 +18,7 @@
 #include <Library/UefiDriverEntryPoint.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryMapHelperLib.h>
+#include <Library/MemoryAllocationLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Protocol/EFIRamPartition.h>
 

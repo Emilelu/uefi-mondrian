@@ -29,6 +29,7 @@
   UefiBootServicesTableLib
   DebugLib
   MemoryMapHelperLib
+  MemoryAllocationLib
   BaseMemoryLib
 
 [Protocols]
