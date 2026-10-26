@@ -1,7 +1,8 @@
   INF MdeModulePkg/Core/Dxe/DxeMain.inf
   INF MdeModulePkg/Universal/PCD/Dxe/Pcd.inf
 
-  # INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf  # K60: removed, constructor ASSERT stalls DXE dispatch
+  INF QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf  # K60: open-source provider (env/ram chain)
+  INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf
 
   INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
   INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf

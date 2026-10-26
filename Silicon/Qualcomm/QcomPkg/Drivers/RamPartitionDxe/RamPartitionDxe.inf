@@ -1,0 +1,38 @@
+## @file
+#  RamPartitionDxe.inf — Open-source EFI_RAMPARTITION_PROTOCOL provider.
+#
+#  Parses the usable RAM partition table from SMEM item 15 and installs
+#  the protocol that vendor drivers linking RamManagerLib expect.
+#
+#  Copyright (c) 2026, K60 mondrian port project.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = RamPartitionDxe
+  FILE_GUID                      = 3E7A21C4-8B5D-4E6F-9A02-7C31D5E8F4B9
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = RamPartitionDxeInitialize
+
+[Sources]
+  RamPartitionDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  SiliciumPkg/SiliciumPkg.dec
+  QcomPkg/QcomPkg.dec
+
+[LibraryClasses]
+  UefiDriverEntryPoint
+  UefiBootServicesTableLib
+  DebugLib
+  MemoryMapHelperLib
+  BaseMemoryLib
+
+[Protocols]
+  gEfiRamPartitionProtocolGuid
+
+[Depex]
+  TRUE
