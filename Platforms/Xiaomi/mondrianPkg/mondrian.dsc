@@ -93,3 +93,6 @@
   # ACPI Tables
   #
   mondrian/AcpiTables.inf
+
+# K60 debug: ASSERT prints and continues (EnvDxe constructor fails w/o RamPartitionDxe; do not deadloop)
+gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x23
