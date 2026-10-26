@@ -81,3 +81,4 @@
   # Custom Drivers
   #
   QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
+  QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf  # K60: open-source EFI_RAMPARTITION_PROTOCOL provider
