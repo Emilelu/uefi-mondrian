@@ -1,0 +1,36 @@
+[Defines]
+  INF_VERSION = 0x0001001B
+  BASE_NAME = MondrianInitrdTest
+  FILE_GUID = D59A187E-8A5C-440F-940A-5DAC5F441680
+  MODULE_TYPE = UEFI_APPLICATION
+  VERSION_STRING = 0.1
+  ENTRY_POINT = MondrianInitrdTestEntry
+
+[Sources]
+  MondrianInitrdTest.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  ArmPkg/ArmPkg.dec
+  UefiCpuPkg/UefiCpuPkg.dec
+
+[LibraryClasses]
+  BaseLib
+  ArmLib
+  ArmMmuLib
+  BaseMemoryLib
+  FdtLib
+  MemoryAllocationLib
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiRuntimeServicesTableLib
+  UefiLib
+
+[Guids]
+  gFdtTableGuid
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiDevicePathProtocolGuid
+  gEfiBlockIoProtocolGuid

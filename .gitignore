@@ -1,0 +1,16 @@
+# Local firmware products and input data are always generated or fetched.
+Build/
+out/
+Conf/.cache/
+*.fd
+*.elf
+*.efi
+*.img
+*.ramdisk
+*.ipsw
+*.dmg
+*.cdr
+*.lzfse
+*.partial
+__pycache__/
+*.py[cod]

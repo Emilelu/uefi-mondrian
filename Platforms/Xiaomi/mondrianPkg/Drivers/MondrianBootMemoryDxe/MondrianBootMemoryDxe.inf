@@ -1,0 +1,41 @@
+[Defines]
+  INF_VERSION = 0x0001001B
+  BASE_NAME = MondrianBootMemoryDxe
+  FILE_GUID = 7B27B767-94A4-4A47-99DD-281F7C604FAA
+  MODULE_TYPE = DXE_DRIVER
+  VERSION_STRING = 0.1
+  ENTRY_POINT = MondrianBootMemoryEntry
+
+[Sources]
+  MondrianBootMemoryDxe.c
+  MondrianInitrd.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+  ArmPkg/ArmPkg.dec
+  UefiCpuPkg/UefiCpuPkg.dec
+  SiliciumPkg/SiliciumPkg.dec
+
+[LibraryClasses]
+  BaseLib
+  ArmMmuLib
+  ArmLib
+  BaseMemoryLib
+  DebugLib
+  FdtLib
+  HobLib
+  UefiLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+
+[Guids]
+  gSiliciumEntryArgHobGuid
+  gFdtTableGuid
+  gEfiEventReadyToBootGuid
+
+[Protocols]
+  gEfiBlockIoProtocolGuid
+  gEfiDevicePathProtocolGuid
+
+[Depex]
+  TRUE

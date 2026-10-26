@@ -1,0 +1,27 @@
+#
+# Boot Shim Configs
+#
+[boot_shim]
+requires_kernel_header = true
+
+#
+# UEFI FD Configs
+# K60: UEFI FD 挪到 0xA7400000（ramoops 占 0xA7000000，冲突规避）
+#
+[uefi_fd]
+base = 0xA7400000
+size = 0x300000
+
+#
+# Android Boot Image Kernel Configs
+#
+[boot_image_kernel]
+kernel_compression = "gzip"
+append_dtb         = true
+
+#
+# Android Boot Image Configs
+# K60 stock boot.img 为 header v4
+#
+[boot_image]
+header_version = 4

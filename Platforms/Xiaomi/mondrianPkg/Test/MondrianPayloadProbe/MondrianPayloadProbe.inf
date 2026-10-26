@@ -1,0 +1,27 @@
+[Defines]
+  INF_VERSION = 0x0001001B
+  BASE_NAME = MondrianPayloadProbe
+  FILE_GUID = 68758577-332C-4B6D-820D-ADCAEE8350FB
+  MODULE_TYPE = UEFI_APPLICATION
+  VERSION_STRING = 0.1
+  ENTRY_POINT = MondrianPayloadProbeEntry
+
+[Sources]
+  MondrianPayloadProbe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  BaseMemoryLib
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+
+[Guids]
+  gEfiFileInfoGuid
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiBlockIoProtocolGuid
