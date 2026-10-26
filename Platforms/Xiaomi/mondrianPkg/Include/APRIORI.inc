@@ -3,7 +3,7 @@ APRIORI DXE {
   INF MdeModulePkg/Universal/PCD/Dxe/Pcd.inf
   INF QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
 
-  INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf
+  # INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf  # K60: removed, constructor ASSERT stalls DXE dispatch
 
   INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
   INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf
