@@ -1,0 +1,64 @@
+## @file
+#  Stand-alone Advanced Logger producer (hosts official DxeCore-instance
+#  sources of AdvLoggerPkg so the protocol is installed without patching
+#  the pinned mu_basecore DxeCore).
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION    = 0x00010019
+  BASE_NAME      = AdvLogDxe
+  FILE_GUID      = 4F7A9C21-6B3E-4D58-9A10-2C5D8E71F3A4
+  MODULE_TYPE    = DXE_DRIVER
+  VERSION_STRING = 0.1
+  ENTRY_POINT    = AdvLogDxeEntry
+
+[Sources]
+  AdvLogDxe.c
+  ../../../../../Common/Mu/AdvLoggerPkg/Library/AdvancedLoggerLib/DxeCore/AdvancedLoggerLib.c
+  ../../../../../Common/Mu/AdvLoggerPkg/Library/AdvancedLoggerLib/AdvancedLoggerCommon.c
+  ../../../../../Common/Mu/AdvLoggerPkg/Library/AdvancedLoggerLib/AdvancedLoggerHwPort.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  AdvLoggerPkg/AdvLoggerPkg.dec
+
+[LibraryClasses]
+  AdvancedLoggerHdwPortLib
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  HobLib
+  MemoryAllocationLib
+  PcdLib
+  SynchronizationLib
+  TimerLib
+  UefiDriverEntryPoint
+  UefiLib
+  VariablePolicyHelperLib
+
+[Guids]
+  gAdvancedLoggerHobGuid
+  gEfiEndOfDxeEventGroupGuid
+  gAdvancedLoggerPreDxeLogsGuid
+
+[Protocols]
+  gAdvancedLoggerProtocolGuid            ## PRODUCES
+  gEdkiiVariablePolicyProtocolGuid       ## CONSUMES
+  gEfiRealTimeClockArchProtocolGuid      ## CONSUMES
+  gEfiVariableWriteArchProtocolGuid      ## CONSUMES
+
+[FixedPcd]
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerPages
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerBase
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerHdwPortDebugPrintErrorLevel
+
+[FeaturePcd]
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerLocator
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerFixedInRAM
+  gAdvLoggerPkgTokenSpaceGuid.PcdAdvancedLoggerAutoWrapEnable
+
+[Depex]
+  TRUE

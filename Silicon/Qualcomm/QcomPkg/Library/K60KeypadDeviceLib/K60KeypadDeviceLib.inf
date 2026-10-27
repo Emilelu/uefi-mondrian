@@ -1,0 +1,25 @@
+##
+# K60 KeypadDeviceLib — SPMI PMIC button sampling for the Silicium
+# KeypadDevice chain (KeypadDeviceDxe + KeypadDxe).
+#
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = K60KeypadDeviceLib
+  FILE_GUID                      = 8601c4e8-2cde-4d6d-88ea-369d3decf1a4
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = KeypadDeviceLib
+
+[Sources]
+  K60KeypadDeviceLib.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  SiliciumPkg/SiliciumPkg.dec
+
+[LibraryClasses]
+  UefiBootServicesTableLib
+  UefiRuntimeServicesTableLib
+  DebugLib

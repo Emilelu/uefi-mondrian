@@ -1,7 +1,9 @@
 # Local firmware products and input data are always generated or fetched.
 Build/
 out/
-Conf/.cache/
+Conf/
+.cache/
+*.log
 *.fd
 *.elf
 *.efi

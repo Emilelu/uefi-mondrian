@@ -36,6 +36,7 @@ gMemoryDescriptor[] = {
   {"xbl_sc_region",      0xA6E00000, 0x00040000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"global_sync_region", 0xA6F00000, 0x00100000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"ramoops",            0xA7000000, 0x00400000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_THROUGH},
+  {"ABL DTB",         0xB6760000, 0x00100000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"Display Reserved",  0xB8000000, 0x02B00000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_THROUGH_XN},
   {"qheebsp_reserved_regi", 0xE0000000, 0x00600000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
   {"cpusys_vm_region",   0xE0600000, 0x00400000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},

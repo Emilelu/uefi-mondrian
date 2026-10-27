@@ -1,6 +1,8 @@
 APRIORI DXE {
   INF MdeModulePkg/Core/Dxe/DxeMain.inf
   INF MdeModulePkg/Universal/PCD/Dxe/Pcd.inf
+  INF mondrianPkg/Drivers/AdvLogDxe/AdvLogDxe.inf
+  INF UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
   INF QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
 
   INF QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf

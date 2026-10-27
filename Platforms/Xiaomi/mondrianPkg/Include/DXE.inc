@@ -28,8 +28,11 @@
   INF FatPkg/EnhancedFatDxe/Fat.inf
   INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
 
-  # K60: RamDiskDxe deferred — needs iasl (acpica-tools) for its ASL; enable when payload chain starts
-  INF QcomPkg/Drivers/K60ButtonsDxe/K60ButtonsDxe.inf
+  # K60: UniXNURamDiskDxe = official required integration; publishes Mu SEC
+  # FDT initrd HOB (DAEE82E6) as read-only block device for payload FAT volume.
+  INF UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
+  INF SiliciumPkg/Drivers/KeypadDeviceDxe/KeypadDeviceDxe.inf
+  INF SiliciumPkg/Drivers/KeypadDxe/KeypadDxe.inf
   INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
 
   INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf

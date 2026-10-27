@@ -87,6 +87,8 @@ READ_LOCK_STATUS   = TRUE
   INF UniXNUPkg/Application/UniXNU/UniXNU.inf
   INF UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf
   INF DarwinBootPkg/Driver/DarwinBoot.inf
+  INF mondrianPkg/Drivers/AdvLogDxe/AdvLogDxe.inf
+  INF UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
 !if $(MONDRIAN_INITRD_DISK_ENABLED) == 1
   INF mondrianPkg/Drivers/MondrianBootMemoryDxe/MondrianBootMemoryDxe.inf
 !endif

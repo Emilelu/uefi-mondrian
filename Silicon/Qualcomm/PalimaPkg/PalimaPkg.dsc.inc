@@ -84,4 +84,8 @@
   QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
   QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf
   SiliciumPkg/Drivers/SimpleFbDxe/SimpleFbDxe.inf
-  QcomPkg/Drivers/K60ButtonsDxe/K60ButtonsDxe.inf
+  # K60 keys: official Silicium KeypadDevice chain replaces K60ButtonsDxe.
+  # KeypadDeviceDxe publishes KEYPAD_DEVICE_PROTOCOL (K60KeypadDeviceLib =
+  # SPMI sampling); KeypadDxe binds it and installs SimpleTextIn/Ex.
+  SiliciumPkg/Drivers/KeypadDeviceDxe/KeypadDeviceDxe.inf
+  SiliciumPkg/Drivers/KeypadDxe/KeypadDxe.inf
