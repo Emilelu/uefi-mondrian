@@ -4,7 +4,6 @@ APRIORI DXE {
   INF QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
 
   INF QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf  # K60: open-source provider (env/ram chain)
-  INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf
 
   INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
   INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf
@@ -13,6 +12,9 @@ APRIORI DXE {
   INF ArmPkg/Drivers/ArmGicDxe/ArmGicDxe.inf
   INF EmbeddedPkg/MetronomeDxe/MetronomeDxe.inf
   INF ArmPkg/Drivers/TimerDxe/TimerDxe.inf
+
+  # K60: EnvDxe AFTER TimerDxe — ArmArchTimerLib ctor needs the Timer arch protocol
+  INF Binaries/pong/QcomPkg/Drivers/EnvDxe/EnvDxe.inf
 
   INF Binaries/pong/QcomPkg/Drivers/SmemDxe/SmemDxe.inf
   INF Binaries/pong/QcomPkg/Drivers/DALSYSDxe/DALSYSDxe.inf
