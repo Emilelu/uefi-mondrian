@@ -104,15 +104,12 @@ BuildXblHobs (
     // Build Scheduler Interface HOB
     BuildGuidDataHob (&gEfiSchedulerInterfaceHobGuid, &SchedulerInterfaceAddr, sizeof (SchedulerInterfaceAddr));
 
-    // Get Scheduler Interface Protocol
-    EFI_KERNEL_PROTOCOL *SchedulerProtocol = (EFI_KERNEL_PROTOCOL *)SchedulerInterfaceAddr;
-
-    // Create FV List
-    UINTN *FvListAddr = CreateFvList (SchedulerProtocol);
-    if (FvListAddr != NULL) {
-      // Build FV List HOB
-      BuildGuidDataHob (&gEfiFvListHobGuid, &FvListAddr, sizeof (FvListAddr));
-    }
+    // K60: CreateFvList calls XBL SchedulerProtocol->Lock->InitLock which
+    // faults on this device (Synchronous Exception at 0xA7017C2C in ramoops).
+    // Skip it — the FV list HOB has no consumer in the open tree.
+    // CreateFvList / FV-list HOB disabled for K60.
+    UINTN *FvListAddr = NULL;
+    (void)FvListAddr;
   }
 
   // Build DTB Extension HOB

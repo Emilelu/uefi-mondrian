@@ -112,6 +112,7 @@ GetXblHobAddresses (
   // Locate Reserved FD Region
   LocateMemoryRegionByName ("FD Reserved", &ReservedFd);
   LocateMemoryRegionByName ("FD_Reserved", &ReservedFd);
+  LocateMemoryRegionByName ("ramoops", &ReservedFd);  // K60: XBL scheduler code lives here (boot17 evidence)
 
   // Verify Reserved FD Region
   if (ReservedFd.Address == 0 && ReservedFd.Length == 0) {

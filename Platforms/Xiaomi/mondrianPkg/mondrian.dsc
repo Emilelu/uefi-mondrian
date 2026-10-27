@@ -96,4 +96,4 @@
 
 # K60 debug: ASSERT prints and continues (vendor EnvDxe ctor ASSERT, no RamPartitionDxe)
 [PcdsFixedAtBuild]
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x23
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x03

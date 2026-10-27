@@ -267,6 +267,11 @@ SerialPortWrite (
     WriteFrameBuffer (FbBase, FbLength, *Buffer++);
   }
 
+  // K60 debug: slow the log scroll so the full driver list + crash point
+  // is photographable before the exception dump overwrites it.
+  for (volatile UINTN DelaySpin = 0; DelaySpin < 80000000; DelaySpin++) {
+  }
+
   // Enable Interrupts
   if (InterruptState) {
     ArmEnableInterrupts ();
