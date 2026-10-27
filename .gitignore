@@ -16,3 +16,7 @@ Conf/
 *.partial
 __pycache__/
 *.py[cod]
+
+# Local overrides must not be committed.
+local.toml
+unixnu.local.toml

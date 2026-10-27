@@ -52,14 +52,21 @@ in the separate `UniXNU-mondrian` repository.
 ## Official consistency
 
 - Vendor binaries (`Binaries` submodule) are unmodified; no `.efi` patch.
-- No Mu/DxeCore source patch is used at build time; the build uses the pinned
-  feed (`out/feeds/mu_basecore-*`).
+- At build time `[firmware].patches` applies two Mu source patches to the pinned
+  `edk2` (Mu_Basecore) checkout: `AsmMacroLib` (normalizes `.text` segment names
+  in `MdePkg/Include/AArch64/AsmMacroLib.h`) and `Boot-Manager`
+  (`BootManagerMenuApp` is present in the K60 FV). Three other patches that were
+  inert for K60 (`Auth-Service`, `Timer`, `Usb-Bus`) have been removed.
 - The only core deviations are in the device repo patch:
   `bootimg.py` v3/v4 header verification, `Config.c` menu timeout, and the
   `UniXNURamDiskDxe` range/alignment guards. They are documented in the patch
   series and can be reverted independently.
+- `MondrianBootMemoryDxe` (FDT initrd block device) is compiled in the DSC but gated out of the FV by `MONDRIAN_INITRD_DISK_ENABLED`, which is undefined in this tree; it is retained for the later XNU initrd path. Its two probes under `Test/` reference it by include/name only.
 - The K60-specific code is `K60KeypadDeviceLib` and the `AdvLogDxe` shell;
   both implement official interfaces or compile official sources.
+- Other K60 device-layer additions beyond those two drivers: `MondrianBootMemoryDxe`
+  (FDT initrd block device), `ConfigurationMapLib`, `MemoryMapLib`, and the two
+  Mu patches listed above. `K60ButtonsDxe` was removed as retired.
 
 ## Known limitations
 

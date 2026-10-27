@@ -1,3 +1,8 @@
+# K60 note: the SecParti.cfg and the ~72 Panel_*.xml below are the pong
+# generic display library (Binaries/pong/RawFiles). None match the K60
+# 1440x3200 panel; they are inert today (no vendor display DXE consumes them).
+# Before enabling a vendor display driver, replace them with the K60 panel XML
+# extracted from the K60 dispdcbx partition or device tree.
   FILE FREEFORM = A1E235DE-E825-4591-9623-C43175811826 {
     SECTION UI = "SecParti.cfg"
     SECTION RAW = Binaries/pong/RawFiles/SecParti.cfg
