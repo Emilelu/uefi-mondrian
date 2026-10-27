@@ -4,7 +4,6 @@
   # K60: open-source providers only — the vendor hardware stack (SMEM/clocks/
   # power/USB/chargers) is an Android-world ecosystem that XNU does not use.
   INF QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf
-  INF QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
 
   INF MdeModulePkg/Universal/ReportStatusCodeRouter/RuntimeDxe/ReportStatusCodeRouterRuntimeDxe.inf
   INF MdeModulePkg/Universal/StatusCodeHandler/RuntimeDxe/StatusCodeHandlerRuntimeDxe.inf
@@ -29,6 +28,7 @@
   INF FatPkg/EnhancedFatDxe/Fat.inf
   INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
 
+  INF MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf
   INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
 
   INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf

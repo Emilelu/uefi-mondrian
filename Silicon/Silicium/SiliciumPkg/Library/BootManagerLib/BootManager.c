@@ -22,6 +22,11 @@
 #include <Configuration/BootDevices.h>
 
 #include "BootManager.h"
+#include <Library/UefiBootManagerLib.h>
+#include <Protocol/LoadedImage.h>
+
+// UniXNU application FFS GUID (UniXNUPkg/Application/UniXNU/UniXNU.inf)
+STATIC CONST EFI_GUID gUniXNUAppFileGuid = { 0x9B665204, 0xA133, 0x47A2, { 0x93, 0x96, 0x9E, 0x2B, 0x37, 0x0A, 0x4E, 0x25 } };
 
 //
 // Global Variables
@@ -108,6 +113,37 @@ PlatformBootManagerAfterConsole ()
   Status = DisplayBootGraphic (BG_SYSTEM_LOGO);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "%a: Failed to Display Boot Logo! Status = %r\n", __FUNCTION__, Status));
+  }
+
+  // K60: auto-launch the UniXNU boot manager application from the FV.
+  // Standard BdsDxe only scans FAT partitions for \EFI\BOOT\BOOTAA64.EFI and
+  // never runs FV-internal applications, so launch it here explicitly.
+  {
+    EFI_DEVICE_PATH_PROTOCOL *UniXNUDevicePath;
+    EFI_HANDLE                UniXNUImageHandle = NULL;
+
+    UniXNUDevicePath = EfiBootManagerGetFvFileDevicePath (&gUniXNUAppFileGuid);
+    if (UniXNUDevicePath != NULL) {
+      Status = gBS->LoadImage (
+                      TRUE,
+                      gImageHandle,
+                      UniXNUDevicePath,
+                      NULL,
+                      0,
+                      &UniXNUImageHandle
+                      );
+      if (!EFI_ERROR (Status)) {
+        DEBUG ((EFI_D_INFO, "%a: launching UniXNU app\n", __FUNCTION__));
+        Status = gBS->StartImage (UniXNUImageHandle, NULL, NULL);
+        DEBUG ((EFI_D_INFO, "%a: UniXNU app exited: %r\n", __FUNCTION__, Status));
+      } else {
+        DEBUG ((EFI_D_ERROR, "%a: UniXNU LoadImage failed: %r\n", __FUNCTION__, Status));
+      }
+
+      FreePool (UniXNUDevicePath);
+    } else {
+      DEBUG ((EFI_D_ERROR, "%a: UniXNU FvFile device path not found\n", __FUNCTION__));
+    }
   }
 
   // Register Key Callback

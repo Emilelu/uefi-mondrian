@@ -36,6 +36,7 @@
   MsBootOptionsLib
   BootGraphicsLib
   DevicePathLib
+  UefiBootManagerLib
   PrintLib
 
 [Pcd]

@@ -31,8 +31,7 @@ gMemoryDescriptor[] = {
   {"mpss_region",        0x8BC00000, 0x13200000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
   {"cvp_region",         0x9EE00000, 0x00700000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
   {"camera_region",      0x9F500000, 0x00800000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
-  {"adsp_region",        0x9FD00000, 0x0028C000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
-  {"adsp_region",        0x9FF8D000, 0x00E73000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
+  {"adsp_region",        0x9FD00000, 0x03100000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
   {"xbl_ramdump_region", 0xA6B80000, 0x00280000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"xbl_sc_region",      0xA6E00000, 0x00040000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"global_sync_region", 0xA6F00000, 0x00100000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
@@ -50,7 +49,7 @@ gMemoryDescriptor[] = {
   // ---- UEFI 系统区（K60 布局）----
   {"UEFI FD",            0xA7400000, 0x00300000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
   {"FD Reserved",   0xA7700000, 0x00200000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
-  {"CPU Vectors",      0x9FF8C000, 0x00001000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
+  {"CPU Vectors",      0xA7900000, 0x00001000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
   {"Info Blk",           0xA7901000, 0x00001000, AddMem, SYS_MEM  , SYS_MEM_CAP, RtData , WRITE_BACK_XN},
   {"MMU PageTables",     0xA7902000, 0x00003000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK_XN},
   {"Log Buffer",         0xA7905000, 0x00008000, AddMem, SYS_MEM  , SYS_MEM_CAP, RtData , WRITE_BACK_XN},
