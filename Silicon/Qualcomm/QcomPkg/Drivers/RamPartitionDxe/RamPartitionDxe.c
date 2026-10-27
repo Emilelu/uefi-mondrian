@@ -340,8 +340,19 @@ DeriveFromBootServicesMap (
   UINT32                Count    = 0;
   RAM_PARTITION        *Parts    = NULL;
 
-  Status = gBS->GetMemoryMap (&MapSize, &Map, &MapKey, &DescSize, &DescVer);
+  Status = gBS->GetMemoryMap (&MapSize, NULL, &MapKey, &DescSize, &DescVer);
+  if ((Status != EFI_BUFFER_TOO_SMALL) || (MapSize == 0)) {
+    return EFI_NOT_FOUND;
+  }
+
+  Map = (EFI_MEMORY_DESCRIPTOR *)AllocatePool (MapSize);
+  if (Map == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  Status = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
   if (EFI_ERROR (Status)) {
+    FreePool (Map);
     return Status;
   }
 
