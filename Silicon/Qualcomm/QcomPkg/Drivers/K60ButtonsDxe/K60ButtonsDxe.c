@@ -1,20 +1,26 @@
 /** @file
-  K60ButtonsDxe.c — Open-source polled buttons driver for Redmi K60 (SM8475).
+  K60ButtonsDxe.c v3 — auto-detecting SPMI arbiter version.
 
-  v7 SPMI arbiter register layout (K60 boot36 evidence: v2-style map table at
-  core+0x900 read all-zeros and every OBS transaction timed out; SM8475 is a
-  waipio-family 2022 SoC). Layout per Linux drivers/spmi/spmi-pmic-arb.c v7:
+  boot36 dump evidence: v2-style map table (core+0x900) reads all-zero with
+  4 junk entries at core+0x1000, and every OBS transaction times out — the
+  arbiter is NOT the v2 layout sweet uses (SM7150). K60 is SM8475; the Linux
+  driver (drivers/spmi/spmi-pmic-arb.c) auto-detects the version from
+  core+0x0 and picks per-version layouts. This driver does the same:
 
-    APID map table : core + 0x2000 + 4*apid        (PPID = (val >> 8) & 0xFFF)
-    OBS channel    : obs + 0x8000*ee + 0x20*apid   (EE0 -> 0x20*apid)
-    APID owner     : cnfg + 0x4*apid               (owner = val & 0x7)
-    command        : per-channel 0x00 cmd / 0x08 status / 0x18 rdata0
-    APID count     : (core + 0x4 FEATURES) & 0x7FF
+    version >= 0x70000000 -> v7: map core+0x2000+4n, obs 0x8000*ee+0x20*apid,
+                                   owner cnfg+4n
+    version >= 0x50000000 -> v5: map core+0x900+4n, obs 0x10000*ee+0x80*apid,
+                                   owner cnfg+0x700+4n
+    otherwise             -> v2: obs 0x1000*ee+0x8000*apid, owner cnfg+0x700+4n
 
   Buttons (Qualcomm standard):
-    Power       = PON periph status bit 0 (pwrkey)   [PPID 0x012, pon@1200 PMK8350]
-    Volume down = PON periph status bit 1 (resin)
-    Volume up   = PMIC GPIO pin status (active low)  [PPID 0x0C5, pmk8350 gpio6 @c500]
+    Power       = PON periph INT_RT_STS (reg 0x10) bit0 (pwrkey)
+    Volume down = PON periph INT_RT_STS bit1 (resin)
+    Volume up   = PMIC GPIO periph INT_RT_STS bit0 (active low)
+
+  Diagnosis output: version + apid_count + a probe of the first 8 map words
+  at BOTH candidate map locations, then the family-filtered peripheral dump
+  (PON = PPID family 0x12, GPIO = PPID family 0xC0..0xCF), 2 s hold per line.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
@@ -29,34 +35,42 @@
 
 //
 // K60 (SM8475) SPMI PMIC arbiter — from live FDT
-// (cnfg 0xc42d000, core 0xc400000, obsrvr 0xc440000)
+// (cnfg 0xc42d000, core 0xc400000, obsrvr 0xc440000, chnls 0xc500000)
 //
 #define SPMI_CORE_PA   0x0C400000u
 #define SPMI_OBS_PA    0x0C440000u
 #define SPMI_CNFG_PA   0x0C42D000u
+#define SPMI_CHNLS_PA  0x0C500000u
 
-/* v7 layout */
-#define SPMI_REG_VERSION   0x0000u
-#define SPMI_REG_FEATURES  0x0004u
-#define SPMI_FEATURES_MASK 0x7FFu
-#define SPMI_MAP_BASE      0x2000u     /* v7: core + 0x2000 + 4*apid */
-#define SPMI_MAP_MAX       1024u
-#define SPMI_OBS_CHN       0x20u       /* v7: obs channel stride */
-#define SPMI_NO_APID       0xFFFFu
+#define SPMI_REG_VERSION    0x0000u
+#define SPMI_REG_FEATURES   0x0004u
+#define SPMI_FEATURES_MASK  0x7FFu
+#define SPMI_NO_APID        0xFFFFu
 
-#define PON_REG_STATUS   0x10u         /* bit0 pwrkey, bit1 resin(vol-dn) */
-#define GPIO_REG_STATUS  0x10u         /* bit0 = pin value (active low) */
+#define PON_REG_STATUS   0x10u         /* INT_RT_STS: bit0 pwrkey, bit1 resin */
+#define GPIO_REG_STATUS  0x10u         /* INT_RT_STS bit0 = pin (active low) */
+
+typedef enum {
+  ARB_V2,
+  ARB_V5,
+  ARB_V7,
+} ARB_VERSION;
 
 typedef struct {
   UINT32 Core;
   UINT32 Obs;
   UINT32 Cnfg;
-} SPMI_REGS;
+  UINT32 Chnls;
+  ARB_VERSION Ver;
+  UINT32 MapBase;      /* core-relative map table offset */
+  UINT32 ObsStride;    /* per-apid OBS channel stride    */
+  UINT32 OwnerBase;    /* cnfg-relative owner table offset */
+  UINT16 ApidCount;
+} SPMI_CTX;
 
-STATIC SPMI_REGS                      mRegs;
-STATIC UINT16                         mApidCount = 0;
-STATIC UINT16                         mPonApid   = SPMI_NO_APID;
-STATIC UINT16                         mGpioApid  = SPMI_NO_APID;
+STATIC SPMI_CTX                       mCtx;
+STATIC UINT16                         mPonApid  = SPMI_NO_APID;
+STATIC UINT16                         mGpioApid = SPMI_NO_APID;
 STATIC EFI_EVENT                      mPollEvent = NULL;
 STATIC EFI_SIMPLE_TEXT_INPUT_PROTOCOL mSimpleTextIn;
 STATIC EFI_HANDLE                     mTextInHandle = NULL;
@@ -88,7 +102,7 @@ Wr32 (
   __asm__ volatile ("dsb osh" ::: "memory");
 }
 
-/* One-byte EXT_READL through the observer channel (v7: obs + 0x20*apid). */
+/* One-byte EXT_READL through the observer channel (offset per version). */
 STATIC
 EFI_STATUS
 SpmiRead8 (
@@ -97,21 +111,21 @@ SpmiRead8 (
   OUT UINT8  *Out
   )
 {
-  UINT32 Off = SPMI_OBS_CHN * Apid;
+  UINT32 Off = mCtx.ObsStride * Apid;
   UINT32 Cmd = (1u << 27) | ((UINT32)Addr << 4);
   UINT32 St;
   UINTN  Spin;
 
-  Wr32 (mRegs.Obs, Off, Cmd);
+  Wr32 (mCtx.Obs, Off, Cmd);
 
   for (Spin = 0; Spin < 1000; Spin++) {
-    St = Rd32 (mRegs.Obs, Off + 0x08u);
+    St = Rd32 (mCtx.Obs, Off + 0x08u);
     if (St & 1u) {
       if (St & 0x0eu) {
         return EFI_DEVICE_ERROR;
       }
 
-      *Out = (UINT8)Rd32 (mRegs.Obs, Off + 0x18u);
+      *Out = (UINT8)Rd32 (mCtx.Obs, Off + 0x18u);
       return EFI_SUCCESS;
     }
   }
@@ -119,7 +133,7 @@ SpmiRead8 (
   return EFI_TIMEOUT;
 }
 
-/* PPID -> APID via the v7 map table (apps-owned entries preferred). */
+/* PPID -> APID via the version-appropriate map table. */
 STATIC
 UINT16
 FindApid (
@@ -128,14 +142,14 @@ FindApid (
 {
   UINT16 Found = SPMI_NO_APID;
 
-  for (UINT32 i = 0; i < mApidCount; i++) {
-    UINT32 Map = Rd32 (mRegs.Core, SPMI_MAP_BASE + 4u * i);
+  for (UINT32 i = 0; i < mCtx.ApidCount; i++) {
+    UINT32 Map = Rd32 (mCtx.Core, mCtx.MapBase + 4u * i);
 
     if ((Map == 0) || (((Map >> 8) & 0xFFFu) != Ppid)) {
       continue;
     }
 
-    UINT32 Owner = Rd32 (mRegs.Cnfg, 4u * i) & 7u;
+    UINT32 Owner = Rd32 (mCtx.Cnfg, mCtx.OwnerBase + 4u * i) & 7u;
     if ((Found == SPMI_NO_APID) || (Owner == 0)) {
       Found = (UINT16)i;
     }
@@ -144,10 +158,40 @@ FindApid (
   return Found;
 }
 
+STATIC
+VOID
+Hold2s (
+  VOID
+  )
+{
+  for (volatile UINT64 Hold = 0; Hold < 5000000000ULL; Hold++) {
+  }
+}
+
 /**
-  Enumerate EE0-owned APIDs: dump PPID + type/subtype for each, so PON/GPIO
-  PPIDs can be pinned from the boot log. Only apps-owned channels are touched
-  (OBS traffic on foreign-EE channels raises bus errors — boot26 evidence).
+  Dump the first 8 map words at both candidate map locations — ground truth
+  for which table is real, independent of the version guess.
+**/
+STATIC
+VOID
+DumpMapProbes (
+  VOID
+  )
+{
+  DEBUG ((DEBUG_ERROR, "K60BTN MAP@0x900: 900:%08x 904:%08x 908:%08x 90c:%08x\n",
+          Rd32 (mCtx.Core, 0x900u), Rd32 (mCtx.Core, 0x904u),
+          Rd32 (mCtx.Core, 0x908u), Rd32 (mCtx.Core, 0x90cu)));
+  DEBUG ((DEBUG_ERROR, "K60BTN MAP@0x2000: 2000:%08x 2004:%08x 2008:%08x 200c:%08x\n",
+          Rd32 (mCtx.Core, 0x2000u), Rd32 (mCtx.Core, 0x2004u),
+          Rd32 (mCtx.Core, 0x2008u), Rd32 (mCtx.Core, 0x200cu)));
+  Hold2s ();
+}
+
+/**
+  Enumerate EE0-owned APIDs in the button-relevant families:
+    PON  = PPID low byte 0x12       (periph 0x12xx)
+    GPIO = PPID low byte 0xC0..0xCF (periph 0xCx00)
+  Each match prints with a 2 s hold so it is photographable.
 **/
 STATIC
 VOID
@@ -155,19 +199,27 @@ EnumeratePeripherals (
   VOID
   )
 {
-  for (UINT32 i = 0; i < mApidCount; i++) {
-    UINT32 Map = Rd32 (mRegs.Core, SPMI_MAP_BASE + 4u * i);
+  for (UINT32 i = 0; i < mCtx.ApidCount; i++) {
+    UINT32 Map = Rd32 (mCtx.Core, mCtx.MapBase + 4u * i);
 
     if (Map == 0) {
       continue;
     }
 
-    UINT32 Owner = Rd32 (mRegs.Cnfg, 4u * i) & 7u;
+    UINT32 Owner = Rd32 (mCtx.Cnfg, mCtx.OwnerBase + 4u * i) & 7u;
     if (Owner != 0) {
       continue;
     }
 
-    UINT16 Ppid = (UINT16)((Map >> 8) & 0xFFFu);
+    UINT16 Ppid   = (UINT16)((Map >> 8) & 0xFFFu);
+    UINT16 Family = Ppid & 0xFFu;
+    BOOLEAN IsPon  = (Family == 0x12u);
+    BOOLEAN IsGpio = ((Family >= 0xC0u) && (Family <= 0xCFu));
+
+    if (!IsPon && !IsGpio) {
+      continue;
+    }
+
     UINT16 Apid = (UINT16)i;
     UINT8  Sub  = 0;
     UINT8  Type = 0;
@@ -177,7 +229,8 @@ EnumeratePeripherals (
 
     DEBUG ((
       DEBUG_ERROR,
-      "K60BTN: apid=%3u ppid=%03x type=%02x subtype=%02x (%r/%r)\n",
+      "K60BTN %a: apid=%3u ppid=%03x type=%02x subtype=%02x (%r/%r)\n",
+      IsPon ? "PON " : "GPIO",
       Apid,
       Ppid,
       Type,
@@ -185,12 +238,13 @@ EnumeratePeripherals (
       S2,
       S1
       ));
+    Hold2s ();
   }
 }
 
 /**
-  Locate the PON peripheral (PMK8350 pon@1200 -> PPID 0x012) and the
-  volume-up GPIO peripheral (pmk8350 gpio6 @c500 -> PPID 0x0C5).
+  Locate the PON peripheral (PPID 0x012) and the volume-up GPIO peripheral
+  (PMK8350 gpio6 @c500 -> PPID 0x0C5, plus fallbacks).
 **/
 STATIC
 VOID
@@ -309,26 +363,48 @@ K60ButtonsDxeInitialize (
 {
   EFI_STATUS Status;
 
-  mRegs.Core = SPMI_CORE_PA;
-  mRegs.Obs  = SPMI_OBS_PA;
-  mRegs.Cnfg = SPMI_CNFG_PA;
+  mCtx.Core  = SPMI_CORE_PA;
+  mCtx.Obs   = SPMI_OBS_PA;
+  mCtx.Cnfg  = SPMI_CNFG_PA;
+  mCtx.Chnls = SPMI_CHNLS_PA;
 
   //
-  // Identify the arbiter version and APID count from the hardware itself.
+  // Auto-detect the arbiter version exactly like the Linux driver does.
   //
-  UINT32 Version  = Rd32 (mRegs.Core, SPMI_REG_VERSION);
-  mApidCount      = (UINT16)(Rd32 (mRegs.Core, SPMI_REG_FEATURES) & SPMI_FEATURES_MASK);
+  UINT32 Version = Rd32 (mCtx.Core, SPMI_REG_VERSION);
+
+  if (Version >= 0x70000000u) {
+    mCtx.Ver       = ARB_V7;
+    mCtx.MapBase   = 0x2000u;
+    mCtx.ObsStride = 0x20u;
+    mCtx.OwnerBase = 0u;
+  } else if (Version >= 0x50000000u) {
+    mCtx.Ver       = ARB_V5;
+    mCtx.MapBase   = 0x900u;
+    mCtx.ObsStride = 0x80u;
+    mCtx.OwnerBase = 0x700u;
+  } else {
+    mCtx.Ver       = ARB_V2;
+    mCtx.MapBase   = 0x900u;
+    mCtx.ObsStride = 0x8000u;
+    mCtx.OwnerBase = 0x700u;
+  }
+
+  mCtx.ApidCount = (UINT16)(Rd32 (mCtx.Core, SPMI_REG_FEATURES) & SPMI_FEATURES_MASK);
 
   DEBUG ((
     DEBUG_ERROR,
-    "K60BTN: arbiter version=%08x apid_count=%u (v7 layout assumed)\n",
+    "K60BTN: arbiter version=%08x apid_count=%u map@%x obsStride=%x owner@cnfg+%x\n",
     Version,
-    mApidCount
+    mCtx.ApidCount,
+    mCtx.MapBase,
+    mCtx.ObsStride,
+    mCtx.OwnerBase
     ));
+  Hold2s ();
 
-  //
-  // Full EE0-owned peripheral dump (appears in the log once).
-  //
+  DumpMapProbes ();
+
   EnumeratePeripherals ();
   LocateButtons ();
 
@@ -339,11 +415,8 @@ K60ButtonsDxeInitialize (
       mPonApid,
       mGpioApid
       ));
-
-    /* freeze 30 s so the dump above is photographable */
-    for (volatile UINT64 Pause = 0; Pause < 25000000000ULL; Pause++) {
-    }
-
+    Hold2s ();
+    Hold2s ();
     return EFI_NOT_FOUND;
   }
 
