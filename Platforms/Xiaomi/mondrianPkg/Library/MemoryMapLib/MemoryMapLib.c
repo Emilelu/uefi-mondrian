@@ -49,6 +49,7 @@ gMemoryDescriptor[] = {
   // ---- UEFI 系统区（K60 布局）----
   {"UEFI FD",            0xA7400000, 0x00300000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
   {"FD Reserved",   0xA7700000, 0x00200000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
+  {"PMIC ARB SPMI",      0x0C400000, 0x2800000, AddDev, MMAP_IO  , UNCACHEABLE, MmIO   , UNCACHED_UNBUFFERED_XN},
   {"CPU Vectors",      0xA7900000, 0x00001000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK},
   {"Info Blk",           0xA7901000, 0x00001000, AddMem, SYS_MEM  , SYS_MEM_CAP, RtData , WRITE_BACK_XN},
   {"MMU PageTables",     0xA7902000, 0x00003000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK_XN},

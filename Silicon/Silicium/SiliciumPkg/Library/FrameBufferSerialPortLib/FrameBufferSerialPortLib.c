@@ -238,12 +238,83 @@ GetFrameBufferMemory (
   return EFI_SUCCESS;
 }
 
+//
+// K60 ramoops console (B task package 13:4x): mirror the log into the
+// persistent_ram console zone at 0xA7000000 so Android's
+// /sys/fs/pstore/console-ramoops-0 exposes the full UEFI log after
+// ResetSystem. Format per Linux drivers/char/mem/pstore/ram.c:
+//   u32 sig (PERSISTENT_RAM_SIG 0x43455343), u32 start, u32 size, data[]
+// The console zone is the first 2 MiB of the ramoops region.
+//
+#define RAMOOPS_BASE   0xA7000000u
+#define RAMOOPS_SIG    0x43455343u
+#define RAMOOPS_LIMIT  0x200000u
+
+STATIC BOOLEAN mRamoopsReady = FALSE;
+
+STATIC
+VOID
+RamoopsInit (
+  VOID
+  )
+{
+  volatile UINT32 *Hdr = (volatile UINT32 *)(UINTN)RAMOOPS_BASE;
+
+  Hdr[0] = RAMOOPS_SIG;
+  Hdr[1] = 0; /* start */
+  Hdr[2] = 0; /* size */
+
+  /* fresh log per boot — nothing in this firmware executes from this region
+     any more (vendor stack culled, CreateFvList disabled), so wiping it is
+     safe; warm reset reloads XBL from flash anyway. */
+  ZeroMem ((VOID *)(UINTN)(RAMOOPS_BASE + 0x10), RAMOOPS_LIMIT - 0x10);
+  WriteBackInvalidateDataCacheRange ((VOID *)(UINTN)RAMOOPS_BASE, 0x1000);
+  mRamoopsReady = TRUE;
+}
+
+STATIC
+VOID
+RamoopsWrite (
+  IN CONST UINT8 *Buffer,
+  IN UINTN        NumberOfBytes
+  )
+{
+  volatile UINT32 *Hdr = (volatile UINT32 *)(UINTN)RAMOOPS_BASE;
+  UINT32           Size;
+  UINTN            Len = NumberOfBytes;
+  UINTN            Off;
+
+  if (!mRamoopsReady) {
+    RamoopsInit ();
+  }
+
+  Size = Hdr[2];
+
+  if (Size >= RAMOOPS_LIMIT - 0x10) {
+    return; /* full: stop writing (simplest policy) */
+  }
+
+  if (Size + Len > RAMOOPS_LIMIT - 0x10) {
+    Len = RAMOOPS_LIMIT - 0x10 - Size;
+  }
+
+  Off    = RAMOOPS_BASE + 0x10 + Size;
+  CopyMem ((VOID *)(UINTN)Off, Buffer, Len);
+  Hdr[2] = Size + (UINT32)Len;
+
+  /* keep header + the freshly written tail cache-clean */
+  WriteBackInvalidateDataCacheRange ((VOID *)(UINTN)RAMOOPS_BASE, 0x10);
+  WriteBackInvalidateDataCacheRange ((VOID *)(UINTN)Off, Len);
+}
+
 UINTN
 EFIAPI
 SerialPortWrite (
   IN UINT8 *Buffer,
   IN UINTN  NumberOfBytes)
 {
+  RamoopsWrite (Buffer, NumberOfBytes);
+
   EFI_STATUS           Status;
   EFI_PHYSICAL_ADDRESS FbBase;
   UINT64               FbLength;
@@ -267,18 +338,15 @@ SerialPortWrite (
     WriteFrameBuffer (FbBase, FbLength, *Buffer++);
   }
 
-  // K60 debug: slow the log scroll so the full driver list + crash point
-  // is photographable before the exception dump overwrites it.
-  for (volatile UINTN DelaySpin = 0; DelaySpin < 2000000; DelaySpin++) {
-  }
-
   // Enable Interrupts
   if (InterruptState) {
     ArmEnableInterrupts ();
   }
 
   // Flush Frame Buffer
-  WriteBackInvalidateDataCacheRange ((VOID *)FbBase, FbLength);
+  /* flush only the visible fb (1080x2400x4 cap), not the whole 44MB region */
+  UINT64 FlushLen = (FbLength > 0x1000000ULL) ? 0x1000000ULL : FbLength;
+  WriteBackInvalidateDataCacheRange ((VOID *)FbBase, FlushLen);
 
   return NumberOfBytes;
 }

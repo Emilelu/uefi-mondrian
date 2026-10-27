@@ -23,6 +23,8 @@
 
 #include "BootManager.h"
 #include <Library/UefiBootManagerLib.h>
+#include <Library/DevicePathLib.h>
+#include <Library/BaseMemoryLib.h>
 #include <Protocol/LoadedImage.h>
 
 // UniXNU application FFS GUID (UniXNUPkg/Application/UniXNU/UniXNU.inf)
@@ -118,16 +120,36 @@ PlatformBootManagerAfterConsole ()
   // K60: auto-launch the UniXNU boot manager application from the FV.
   // Standard BdsDxe only scans FAT partitions for \EFI\BOOT\BOOTAA64.EFI and
   // never runs FV-internal applications, so launch it here explicitly.
+  // (Mu's UefiBootManagerLib lacks EfiBootManagerGetFvFileDevicePath, so build
+  //  the device path from this driver's own LoadedImage->DeviceHandle.)
   {
-    EFI_DEVICE_PATH_PROTOCOL *UniXNUDevicePath;
+    EFI_LOADED_IMAGE_PROTOCOL *SelfLI;
+    EFI_DEVICE_PATH_PROTOCOL  *SelfDp;
+    EFI_DEVICE_PATH_PROTOCOL  *UniXNUDp;
     EFI_HANDLE                UniXNUImageHandle = NULL;
 
-    UniXNUDevicePath = EfiBootManagerGetFvFileDevicePath (&gUniXNUAppFileGuid);
-    if (UniXNUDevicePath != NULL) {
+    typedef struct {
+      EFI_DEVICE_PATH_PROTOCOL Header;
+      EFI_GUID                 FvFileName;
+    } K60_FW_VOL_FILE_DP;
+
+    K60_FW_VOL_FILE_DP FvNode;
+
+    Status = gBS->HandleProtocol (gImageHandle, &gEfiLoadedImageProtocolGuid, (VOID **)&SelfLI);
+    if (!EFI_ERROR (Status)) {
+      SelfDp = DevicePathFromHandle (SelfLI->DeviceHandle);
+
+      FvNode.Header.Type    = MEDIA_DEVICE_PATH;
+      FvNode.Header.SubType = MEDIA_PIWG_FW_FILE_DP;
+      SetDevicePathNodeLength (&FvNode.Header, sizeof (FvNode));
+      CopyGuid (&FvNode.FvFileName, &gUniXNUAppFileGuid);
+
+      UniXNUDp = AppendDevicePathNode (SelfDp, (EFI_DEVICE_PATH_PROTOCOL *)&FvNode);
+
       Status = gBS->LoadImage (
                       TRUE,
                       gImageHandle,
-                      UniXNUDevicePath,
+                      UniXNUDp,
                       NULL,
                       0,
                       &UniXNUImageHandle
@@ -139,10 +161,8 @@ PlatformBootManagerAfterConsole ()
       } else {
         DEBUG ((EFI_D_ERROR, "%a: UniXNU LoadImage failed: %r\n", __FUNCTION__, Status));
       }
-
-      FreePool (UniXNUDevicePath);
     } else {
-      DEBUG ((EFI_D_ERROR, "%a: UniXNU FvFile device path not found\n", __FUNCTION__));
+      DEBUG ((EFI_D_ERROR, "%a: no LoadedImage on self\n", __FUNCTION__));
     }
   }
 

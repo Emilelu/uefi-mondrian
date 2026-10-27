@@ -28,7 +28,8 @@
   INF FatPkg/EnhancedFatDxe/Fat.inf
   INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
 
-  INF MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf
+  # K60: RamDiskDxe deferred — needs iasl (acpica-tools) for its ASL; enable when payload chain starts
+  INF QcomPkg/Drivers/K60ButtonsDxe/K60ButtonsDxe.inf
   INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
 
   INF EmbeddedPkg/SimpleTextInOutSerial/SimpleTextInOutSerial.inf

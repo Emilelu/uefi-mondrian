@@ -1,0 +1,38 @@
+## @file
+#  K60ButtonsDxe.inf — Open-source polled buttons driver for Redmi K60.
+#
+#  Reads power / volume-up / volume-down directly from the PMIC over the
+#  SPMI arbiter observer channel and provides EFI_SIMPLE_TEXT_INPUT.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = K60ButtonsDxe
+  FILE_GUID                      = 6F2A9D31-4C7E-4B58-8E13-92D5A7C4F018
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = K60ButtonsDxeInitialize
+
+[Sources]
+  K60ButtonsDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  SiliciumPkg/SiliciumPkg.dec
+  QcomPkg/QcomPkg.dec
+
+[LibraryClasses]
+  UefiDriverEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  DebugLib
+  MemoryMapHelperLib
+  BaseMemoryLib
+
+[Protocols]
+  gEfiSimpleTextInProtocolGuid
+
+[Depex]
+  TRUE

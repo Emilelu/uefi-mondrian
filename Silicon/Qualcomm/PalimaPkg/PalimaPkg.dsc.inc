@@ -66,6 +66,7 @@
 !endif
 
 [LibraryClasses]
+  FileExplorerLib|MdeModulePkg/Library/FileExplorerLib/FileExplorerLib.inf
   #
   # SEC Libraries
   #
@@ -83,4 +84,4 @@
   QcomPkg/Drivers/IortDtDxe/IortDtDxe.inf
   QcomPkg/Drivers/RamPartitionDxe/RamPartitionDxe.inf
   SiliciumPkg/Drivers/SimpleFbDxe/SimpleFbDxe.inf
-  MdeModulePkg/Universal/Disk/RamDiskDxe/RamDiskDxe.inf  # K60: open-source EFI_RAMPARTITION_PROTOCOL provider
+  QcomPkg/Drivers/K60ButtonsDxe/K60ButtonsDxe.inf
