@@ -396,18 +396,15 @@ KeypadDeviceGetKeys (
     }
   }
 
-  if (!mKeyEverSeen && !mAutoResetDone) {
-    mTicks++;
-
-    if (mTicks == AUTORESET_WARN_TICKS) {
-      DEBUG ((
-        DEBUG_ERROR,
-        "K60KEY AUTO: no key activity - cold reset to fastboot in 10s\n"
-        ));
-    } else if (mTicks >= AUTORESET_TICKS) {
-      AutoResetToFastboot ();
-    }
-  }
+  //
+  // No idle auto-reset. It used to cold reset 60 s after boot unless a key
+  // had been pressed, which on this board means the phone silently drops back
+  // into Android while the operator is reading the menu: the 0x77665500
+  // reason never reaches ABL through PSCI, so it boots normally instead of
+  // returning to fastboot. Keeping a menu up is worth more than the safety
+  // net; AutoResetToFastboot() still runs when SPMI init failed.
+  //
+  mTicks = 0;
 
   return EFI_SUCCESS;
 }
