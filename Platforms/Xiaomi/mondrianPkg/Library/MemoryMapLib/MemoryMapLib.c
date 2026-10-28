@@ -36,7 +36,19 @@ gMemoryDescriptor[] = {
   {"xbl_sc_region",      0xA6E00000, 0x00040000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"global_sync_region", 0xA6F00000, 0x00100000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"ramoops",            0xA7000000, 0x00400000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_THROUGH},
-  {"ABL DTB",         0xB6760000, 0x00100000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
+  // ABL fastboot-boot staging window: everything between "UEFI RESV"
+  // (ends 0xA8300000) and "Display Reserved" (starts 0xB8000000) had no
+  // descriptor, so it was never mapped and the first read took a level-2
+  // translation fault.  ABL parks three things in here:
+  //   - the DTB it hands over in x0   (image_base + header + kernel_size,
+  //                                    so it drifts with boot.img size:
+  //                                    1 MiB image -> 0xB6760000,
+  //                                    193 MiB image -> 0xAA760000)
+  //   - the concatenated initrd        (0xAA961000, 214.5 MiB = our 192 MiB
+  //                                    payload FAT + a ~22 MiB vendor_boot
+  //                                    ramdisk tail)
+  // One Reserv descriptor covers all of it: readable, never allocatable.
+  {"ABL Staging",   0xA8300000, 0x0FD00000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
   {"Display Reserved",  0xB8000000, 0x02B00000, AddMem, MEM_RES  , SYS_MEM_CAP, Reserv , WRITE_THROUGH_XN},
   {"qheebsp_reserved_regi", 0xE0000000, 0x00600000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
   {"cpusys_vm_region",   0xE0600000, 0x00400000, AddMem, MEM_RES  , UNCACHEABLE, Reserv , UNCACHED_UNBUFFERED_XN},
@@ -60,8 +72,15 @@ gMemoryDescriptor[] = {
   {"Sched Heap",         0xA79D9000, 0x00400000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK_XN},
   {"FV Region",          0xA7DD9000, 0x00400000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK_XN},
   {"UEFI RESV",          0xA81D9000, 0x00127000, AddMem, SYS_MEM  , SYS_MEM_CAP, BsData , WRITE_BACK_XN},
-  {"Kernel",             0xBB000000, 0x10000000, AddMem, SYS_MEM  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
-  {"DXE Heap",           0xCB000000, 0x04000000, AddMem, SYS_MEM  , SYS_MEM_CAP, Conv   , WRITE_BACK_XN},
+  {"Kernel",             0xBB000000, 0x0C000000, AddMem, SYS_MEM  , SYS_MEM_CAP, Reserv , WRITE_BACK_XN},
+  // 384 MiB from 0xC7000000 to 0xDF000000. Two constraints drove this:
+  //   - UniXNU reads Payloads/kernel.macho (52 MiB) with one AllocateZeroPool
+  //     and only frees it after DarwinBoot has taken its window, so the
+  //     image sits in the heap while the window is being reserved;
+  //   - DarwinBoot asks for one CONTIGUOUS 256 MiB run (WINDOW_SIZE) and
+  //     failed with "biggest run 0xF0A0000" when the heap was 320 MiB.
+  // "Kernel" above keeps 192 MiB as a reservation for XNU itself.
+  {"DXE Heap",           0xC7000000, 0x18000000, AddMem, SYS_MEM  , SYS_MEM_CAP, Conv   , WRITE_BACK_XN},
 
   // Other Memory Regions
   {"IMEM Base",          0x14680000, 0x0002A000, NoHob , MMAP_IO  , INITIALIZED, Conv   , NS_DEVICE},
