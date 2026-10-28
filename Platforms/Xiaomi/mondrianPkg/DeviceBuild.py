@@ -31,6 +31,11 @@ class CommonPlatform ():
     WorkspaceRoot = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     PackagesPath = (
         "Platforms/Xiaomi",
+        # UniXNU packages live outside this workspace.  They are wired in
+        # reproducibly through the UNIXNU_PACKAGES_PATH env var (path-sep
+        # separated); the UniXNU core package/ dir and the device repo
+        # drivers/DarwinBoot22 dir must both be present.
+        *tuple (part for part in os.environ.get ("UNIXNU_PACKAGES_PATH", "").split (os.pathsep) if part),
         "Common/Mu",
         "Common/Mu_OEM_Sample",
         "Mu_Basecore",

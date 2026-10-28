@@ -128,11 +128,19 @@
   #
   # ACPI Tables
   #
+  # Platforms/Xiaomi/mondrian is vendored in this repo: the Silicium-ACPI
+  # submodule pin does not carry that platform, so a clean clone could not
+  # resolve this module otherwise.
   mondrian/AcpiTables.inf
 
 # K60 debug: ASSERT prints and continues (vendor EnvDxe ctor ASSERT, no RamPartitionDxe)
 [PcdsFixedAtBuild]
   gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x03
+  # K60 bring-up: ERROR only. DEBUG_LOAD (0x4) makes DxeCore print one
+  # "Loading driver at 0x... EntryPoint=0x..." line per image, which scrolls
+  # the UniXNU ERROR lines off the screen. Turn 0x4 back on only while
+  # locating a load-time fault.
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000000
   # K60 debug: UniXNU app logs (menu/payload) become ERROR so they
   # pass the global level and reach the Advanced Logger buffer.
   gUniXNUPkgTokenSpaceGuid.PcdUniXNUDebugLevel|0x80000000
