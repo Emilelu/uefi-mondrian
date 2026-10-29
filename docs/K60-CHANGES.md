@@ -42,12 +42,37 @@ in the separate `UniXNU-mondrian` repository.
 ## UniXNU integration
 
 - `UniXNU`, `UniXNUDxe` and `DarwinBoot` are in the FV.
-- The shared `UniXNURamDiskDxe` publishes the FDT initrd as a block device.
-  The K60 tree uses the core patch in
-  `UniXNU-mondrian/patches/unixnu-core/k60-unixnu-core.patch` for the mapped
-  range check and the 4 KiB alignment guard.
+- `UniXNUPkg` and `DarwinBootPkg` are **vendored in-tree** under
+  `Platforms/Xiaomi`, imported from `Chengdong-Yu/uefi-pong@87c10fd`. The
+  checkout therefore builds from a clean clone without a UniXNU framework
+  checkout or the device repository's `drivers/DarwinBoot22` in
+  `PACKAGES_PATH`. Both packages carry a `VENDORED.md` listing every K60 delta.
+- The firmware half of the K60 core patch
+  (`UniXNU-mondrian/patches/unixnu-core/k60-unixnu-core.patch`) is applied to
+  the vendored `UniXNUPkg` at import time instead of to an out-of-tree
+  checkout: the `RAMOOPS` panic mirror dump, the mapped-range and FAT
+  boot-sector guards in `UniXNURamDiskDxe`, `timeout = -1` plus volume probe
+  logs in `Config.c`, and the storage counters in `Main.c`. The
+  `scripts/unixnu/bootimg.py` hunk is not firmware and stays in the device
+  repository.
+- `DarwinBootPkg` is pong's `DarwinBoot24` copy retargeted to the **Darwin 22**
+  `boot_args` ABI (0x2e0 bytes, 608-byte command line), because the K60 payload
+  is `ipados-16.6.1-20G81` (XNU 8796.141.3). This replaces the device
+  repository's `DarwinBoot22` fork in the firmware build; the four values to
+  restore for a Darwin 24 payload are documented in
+  `DarwinBootPkg/Driver/BootArgs.h`.
 - `PcdUniXNUDeviceModel` is `"Redmi K60"`; `board.toml` supplies the
   `mondrian_defconfig` and the firmware DSC/FD paths.
+
+## Panic readability
+
+- `Tools -> Advanced Logger` renders the 4 MiB Advanced Logger buffer as
+  Onesend QR frames; `docs/QR-ADVLOGGER.md` is the operator procedure,
+  including how to read a failed hand-off after a reboot.
+- The loader logs its kernel-window failure (`DARWINBOOT: no window ...`,
+  `DARWINBOOT: free ...`) in addition to drawing it, so the numbers survive the
+  screen being reused.
+
 
 ## Official consistency
 

@@ -30,11 +30,17 @@ class CommonPlatform ():
     Scopes = ('mondrian', 'gcc_aarch64_linux', 'edk2-build')
     WorkspaceRoot = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     PackagesPath = (
+        # UniXNUPkg and DarwinBootPkg are vendored in-tree under
+        # Platforms/Xiaomi (see their VENDORED.md), so this entry alone makes
+        # the checkout buildable: it is listed before anything the UniXNU
+        # build driver contributes and therefore wins name resolution for
+        # UniXNUPkg/ and DarwinBootPkg/.
         "Platforms/Xiaomi",
-        # UniXNU packages live outside this workspace.  They are wired in
-        # reproducibly through the UNIXNU_PACKAGES_PATH env var (path-sep
-        # separated); the UniXNU core package/ dir and the device repo
-        # drivers/DarwinBoot22 dir must both be present.
+        # Optional out-of-tree packages, path-separator separated.  The UniXNU
+        # build driver sets this; it is no longer required for UniXNUPkg or
+        # DarwinBootPkg and is only useful when experimenting against a
+        # separate UniXNU checkout.  Because it is appended after
+        # Platforms/Xiaomi, an in-tree package always takes precedence.
         *tuple (part for part in os.environ.get ("UNIXNU_PACKAGES_PATH", "").split (os.pathsep) if part),
         "Common/Mu",
         "Common/Mu_OEM_Sample",
