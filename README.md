@@ -52,6 +52,10 @@ stuart_build -c Platforms/Xiaomi/mondrianPkg/DeviceBuild.py \
   DEVICE_MODEL=0 ENABLE_SECUREBOOT=0
 ```
 
+Rebuilds are not byte-identical: the PE headers carry the build timestamp, so
+two builds of the same source produce different `.fd` hashes. Identify an image
+by the source commit, not by a hash carried over from another build.
+
 The UniXNU driver above is still the supported path when a bootable payload is
 needed, because it also builds the payload FAT and the Android boot image. Its
 `apply-core-patches.sh` remains necessary for the `scripts/unixnu/bootimg.py`
