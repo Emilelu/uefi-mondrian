@@ -1,26 +1,9 @@
+# Manual only: this fork tracks a single local device build; every push to main
+# used to trigger a full Mu-Silicium UEFI rebuild on hosted runners.
 name: Build UEFI for active devices
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - 'Binaries'
-      - 'Common/**'
-      - 'Mu_Basecore'
-      - 'MuPatches/**'
-      - 'Platforms/**'
-      - 'Silicon/**'
-      - 'Silicium-ACPI'
   workflow_dispatch:
-  pull_request:
-    types: [opened, reopened]
-    paths:
-      - 'Binaries'
-      - 'Common/**'
-      - 'Mu_Basecore'
-      - 'MuPatches/**'
-      - 'Platforms/**'
-      - 'Silicon/**'
-      - 'Silicium-ACPI'
+
 env:
   CI_BUILD: true
 jobs:
