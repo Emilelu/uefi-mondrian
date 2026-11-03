@@ -4,23 +4,7 @@
 
 #include <Base.h>
 
-//
-// K60 port delta: pong's vendored copy of this package carries the Darwin 24
-// ABI (XNU 11417.140.69, 0x480-byte boot_args).  The K60 payload is
-// ipados-16.6.1-20G81, i.e. XNU 8796.141.3 / Darwin 22, whose boot_args is
-// 0x2e0 bytes with a 608-byte command line.  Handing a Darwin 22 kernel a
-// Darwin 24 layout puts BootFlags and MemorySizeActual 0x1a0 bytes past where
-// the kernel reads them, which is an immediate fault on handoff.
-//
-// Everything else in this package is pong's copy unchanged.  To build for a
-// Darwin 24 payload, restore the four values this block replaces:
-//   DARWIN_BOOT_LINE_LENGTH 1024
-//   BootFlags        0x470
-//   MemorySizeActual 0x478
-//   sizeof           0x480
-//
 // XNU 8796.141.3 / Darwin 22 pexpert/pexpert/arm64/boot.h ABI.
-//
 #define DARWIN_BOOT_LINE_LENGTH 608
 typedef struct {
   UINT16  Revision;

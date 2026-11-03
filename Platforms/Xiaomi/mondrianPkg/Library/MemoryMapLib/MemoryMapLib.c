@@ -82,6 +82,17 @@ gMemoryDescriptor[] = {
   // "Kernel" above keeps 192 MiB as a reservation for XNU itself.
   {"DXE Heap",           0xC7000000, 0x18000000, AddMem, SYS_MEM  , SYS_MEM_CAP, Conv   , WRITE_BACK_XN},
 
+  // Measured 2026-11-02 on serial 6033dbec: Android's /memory/reg and
+  // /proc/iomem place high DDR at >= 0x800000000, NOT at 0x100000000.
+  // [0x100000000,0x800000000) is a hole; advertising it caused DarwinBoot
+  // ZeroMem at RVA 0x48fc to take ESR 0x96000010 while copying the kernel.
+  // Expose only [0x840000000,0xa40000000): 8 GiB in one measured, physically
+  // contiguous run, ending below the first observed high reservation at
+  // 0xa69b78000. DarwinWindowSizeValid caps a window at 8 GiB, so this is the
+  // whole usable arena: a 12 GiB window is impossible on this board.
+  // AddMem is intentional: both HOB and identity mapping must be built.
+  {"XNU High Arena",     0x900000000ULL, 0x140000000ULL, AddMem, SYS_MEM, SYS_MEM_CAP, Conv, WRITE_BACK_XN},
+
   // Other Memory Regions
   {"IMEM Base",          0x14680000, 0x0002A000, NoHob , MMAP_IO  , INITIALIZED, Conv   , NS_DEVICE},
   {"IMEM Cookie Base",   0x146AA000, 0x00016000, AddDev, MMAP_IO  , INITIALIZED, Conv   , NS_DEVICE},
