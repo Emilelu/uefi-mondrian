@@ -23,8 +23,13 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: enable auto-merge (squash, delete branch)
-        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
+      # Auto-merge needs a branch protection rule on main; this repository has
+      # none, so fall back to a direct squash merge when the auto-merge request
+      # is refused.
+      - name: merge (auto, then direct)
+        run: |
+          gh pr merge --auto --squash --delete-branch "$PR_URL" \
+            || gh pr merge --squash --delete-branch "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
