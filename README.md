@@ -92,3 +92,5 @@ partition (dual-system); see the device repo `docs/DUAL-SYSTEM.md`.
 
 BSD-2-Clause-Patent for the platform code. Upstream components keep their own
 licenses; `Binaries` remains the official Project-Silicium submodule.
+
+Linux 7.3.3 initramfs 的已验证构建入口见 [LINUX.md](LINUX.md)。
