@@ -20,3 +20,22 @@ __pycache__/
 # Local overrides must not be committed.
 local.toml
 unixnu.local.toml
+
+# Linux bootstrap: commit sources, never local compilation output.
+*.o
+*.ko
+*.a
+*.so
+*.dtb
+*.dtbo
+*.bin
+*.cpio
+*.cpio.*
+Image
+Image.gz
+vmlinux
+System.map
+Module.symvers
+modules.order
+build/
+initramfs.cpio.gz

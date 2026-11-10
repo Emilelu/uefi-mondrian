@@ -100,7 +100,7 @@ STATIC EFI_STATUS Publish (UINT64 Start, UINT64 End) {
   if (Span < MONDRIAN_FAT_HEADER_BYTES + 512) { return EFI_NOT_FOUND; }
   for (Index = 0; Index <= Span - MONDRIAN_FAT_HEADER_BYTES - 512; ++Index) {
     Header = Bytes + Index;
-    if (Header[0] != 'P' || CompareMem (Header, MONDRIAN_FAT_MAGIC, 8) != 0) { continue; }
+    if (Header[0] != MONDRIAN_FAT_MAGIC[0] || CompareMem (Header, MONDRIAN_FAT_MAGIC, 8) != 0) { continue; }
     if (ReadUnaligned32 ((CONST UINT32 *)(Header + 8)) != 1 ||
         ReadUnaligned32 ((CONST UINT32 *)(Header + 12)) != MONDRIAN_FAT_HEADER_BYTES) { continue; }
     Size = ReadUnaligned64 ((CONST UINT64 *)(Header + 16));

@@ -37,6 +37,7 @@ _Dead:
   b     _Dead
 
 .text
+.ltorg
 .align 4
 
 _Payload:

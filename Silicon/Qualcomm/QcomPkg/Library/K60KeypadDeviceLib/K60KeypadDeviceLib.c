@@ -102,7 +102,6 @@ STATIC BTN_CTX  mBtn[3];
 STATIC UINT16   mPonApid     = SPMI_NO_APID;
 STATIC UINT16   mGpioApid    = SPMI_NO_APID;
 STATIC UINT32   mTicks       = 0;
-STATIC BOOLEAN  mKeyEverSeen = FALSE;
 STATIC BOOLEAN  mAutoResetDone = FALSE;
 STATIC BOOLEAN  mInitDone    = FALSE;
 
@@ -377,7 +376,6 @@ KeypadDeviceGetKeys (
 
     if (Down[k] && !B->Down) {
       B->Down = TRUE;
-      mKeyEverSeen = TRUE;
 
       DEBUG ((
         DEBUG_ERROR,

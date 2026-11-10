@@ -93,8 +93,8 @@ READ_LOCK_STATUS   = TRUE
   INF mondrianPkg/Drivers/MondrianBootMemoryDxe/MondrianBootMemoryDxe.inf
 !endif
 
-  # RAM Manager
-  INF SiliciumPkg/Drivers/RamManagerDxe/RamManagerDxe.inf
+  # Bootstrap uses only the explicit MemoryMapLib descriptors.
+  # RamManagerDxe must not expand the map from an unverified SMEM table.
 
   # SmBios
   INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
