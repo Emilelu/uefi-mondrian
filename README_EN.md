@@ -27,8 +27,7 @@ records), and [UniXNU](https://github.com/UniXNU/UniXNU) (core framework and the
 
 Full verification on 2026-11-12 at `bd5cfa6`: `./unixnu build firmware` completed in about
 2m30s and produced `Build/mondrianPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd` at
-**3,145,728 bytes (fixed 3 MiB)**. `board.toml`'s `[uefi_fd] size` enforces that size and fails
-the build otherwise.
+**3,145,728 bytes (fixed 3 MiB)**. `scripts/unixnu/firmware.py` checks the artifact size and fails the build otherwise.
 
 ## Build
 

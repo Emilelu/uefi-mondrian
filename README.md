@@ -25,7 +25,7 @@ K60 移植由三个仓库组成：本仓库（UEFI 固件）、
 
 2026-11-12 在 `bd5cfa6` 上做过一次全量验证：`./unixnu build firmware` 约 2 分 30 秒完成，
 产物 `Build/mondrianPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd` 为 **3,145,728 字节（固定 3 MiB）**。
-`board.toml` 的 `[uefi_fd] size` 会强制校验该尺寸，不符即构建失败。
+`scripts/unixnu/firmware.py` 会校验产物字节数，不符即构建失败。
 
 ## 构建
 
