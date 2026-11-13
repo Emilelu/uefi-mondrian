@@ -8,7 +8,7 @@ UniXNU port. Derived from Project-Silicium / Mu-Silicium; the platform package l
 
 The K60 port spans three repositories: this one (UEFI firmware),
 [UniXNU-mondrian](https://github.com/Emilelu/UniXNU-mondrian) (device support and porting
-records), and [UniXNU](https://github.com/UniXNU/UniXNU) (core framework and the `unixnu` CLI).
+records), and [Emilelu/UniXNU](https://github.com/Emilelu/UniXNU) (core framework and the `unixnu` CLI; official upstream [UniXNU/UniXNU](https://github.com/UniXNU/UniXNU)).
 
 > Last updated: 2026-11-12. Building and bring-up use `fastboot boot` only; no partition is
 > written.

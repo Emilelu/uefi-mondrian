@@ -7,7 +7,7 @@ Redmi K60（代号 **mondrian**，高通 **SM8475**）的 UEFI 固件，用于 U
 
 K60 移植由三个仓库组成：本仓库（UEFI 固件）、
 [UniXNU-mondrian](https://github.com/Emilelu/UniXNU-mondrian)（设备支持与移植记录）、
-[UniXNU](https://github.com/UniXNU/UniXNU)（核心框架与 `unixnu` CLI）。
+[Emilelu/UniXNU](https://github.com/Emilelu/UniXNU)（核心框架与 `unixnu` CLI；官方上游 [UniXNU/UniXNU](https://github.com/UniXNU/UniXNU)）。
 
 > 最后更新：2026-11-12。构建与烧录只走 `fastboot boot`，不写任何分区。
 
