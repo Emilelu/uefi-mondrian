@@ -23,6 +23,7 @@
   BaseLib
   BaseMemoryLib
   DebugLib
+  ImageCarrierLib
   MemoryAllocationLib
   PrintLib
   UefiBootServicesTableLib

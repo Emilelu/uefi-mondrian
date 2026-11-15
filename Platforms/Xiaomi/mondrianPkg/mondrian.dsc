@@ -83,6 +83,15 @@
   MemoryMapLib|mondrianPkg/Library/MemoryMapLib/MemoryMapLib.inf
 
   #
+  # Modem firmware carrier (P-197 workaround: the payload cannot hold the
+  # 109 MB modem image, so the firmware copies it into its reserved carveout
+  # before XNU starts).  Only the read-only half exists; the copy and the
+  # K60ModemImage property return EFI_UNSUPPORTED, so listing the library
+  # cannot change a boot until a call site is added.
+  #
+  ImageCarrierLib|DarwinBootPkg/Library/ImageCarrierLib/ImageCarrierLib.inf
+
+  #
   # QCOM Libraries
   #
   ConfigurationMapLib|mondrianPkg/Library/ConfigurationMapLib/ConfigurationMapLib.inf

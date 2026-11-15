@@ -29,8 +29,8 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/SimpleFileSystem.h>
-#include <Library/ImageCarrierLib.h>
-#include <K60ModemImageTable.h>
+#include "ImageCarrierLib.h"
+#include "K60ModemImageTable.h"
 
 //
 // Display Reserved, the first descriptor after the ABL staging area

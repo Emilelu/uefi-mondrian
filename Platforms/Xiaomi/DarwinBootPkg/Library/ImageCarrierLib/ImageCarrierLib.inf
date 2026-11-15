@@ -1,0 +1,35 @@
+## SPDX-License-Identifier: BSD-2-Clause-Patent
+[Defines]
+  INF_VERSION = 0x00010019
+  BASE_NAME = ImageCarrierLib
+  FILE_GUID = 8E4C1F62-3A57-4B0D-9C21-6D5F7A0E3B14
+  MODULE_TYPE = BASE
+  VERSION_STRING = 0.1
+  LIBRARY_CLASS = ImageCarrierLib
+
+#
+# The read-only half of the modem carrier loader.  It validates the generated
+# table, proves the carveout is still reserved, and checks that the 27 carrier
+# files are present with the sizes the table expects.  The copy into 0x8bc00000
+# and the K60ModemImage property return EFI_UNSUPPORTED until a call site is
+# added, so listing this library in the DSC cannot change a boot by itself.
+#
+[Sources]
+  ImageCarrierLib.c
+  ImageCarrierLib.h
+  K60ModemImageTable.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  MemoryAllocationLib
+  PrintLib
+  UefiBootServicesTableLib
+  UefiLib
+
+[Guids]
+  gEfiFileInfoGuid
