@@ -29,6 +29,7 @@
 #include <Guid/FileInfo.h>
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/CacheMaintenanceLib.h>
 #include <Library/DebugLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PrintLib.h>
@@ -37,6 +38,7 @@
 #include <Protocol/SimpleFileSystem.h>
 #include "ImageCarrierLib.h"
 #include "K60ModemImageTable.h"
+#include "K60ModemMetadata.h"
 #include "LzmaDec.h"
 
 //
@@ -44,6 +46,18 @@
 // (MemoryMapLib.c:52).  Its start is where ABL stopped writing.
 //
 #define ABL_END_ADDRESS  0xB8000000ULL
+
+//
+// The PAS metadata page: the last 64 KiB of ABL staging, above the boot image
+// and below Display Reserved.  The blob is small (modem.mdt's ELF header plus
+// its hash section), so it is embedded in this library rather than carried as
+// a 28th payload file.  The page is write-back memory (MemoryMapLib.c:51),
+// hence the explicit clean before the secure monitor reads it.  The kernel
+// uses the same address (K60ModemBoot.c K60_MODEM_METADATA);
+// scripts/check-modem-metadata.py keeps the two definitions equal.
+//
+#define ABL_STAGING_BASE             0xA8300000ULL
+#define K60_MODEM_METADATA_ADDRESS   0xB7FF0000ULL
 
 STATIC CONST CHAR16  mModemDir[] = L"\\EFI\\UniXNU\\MODEM";
 
@@ -697,6 +711,65 @@ CarrierLoadSegment (
 }
 
 /**
+  Copy the PAS metadata blob into its reserved page.
+
+  The blob is the ELF header and hash section of modem.mdt, embedded in this
+  library by scripts/gen-modem-metadata-header.py.  It is not compressed and
+  not part of the segment table: the framework payload step copies only the
+  names in MODEM_MANIFEST, so a 28th payload file would need a framework
+  change.  PAS_INIT_IMAGE reads the blob from this address.
+
+  @param[in]  Carrier  Filled by CarrierScanMap; AblEnd bounds the page.
+
+  @retval EFI_SUCCESS           The blob is in place and the cache is clean.
+  @retval EFI_COMPROMISED_DATA  The array size or the page bounds are wrong.
+  @retval EFI_DEVICE_ERROR      The CRC could not be computed.
+**/
+STATIC
+EFI_STATUS
+CarrierLoadMetadata (
+  IN CONST IMAGE_CARRIER *Carrier
+  )
+{
+  EFI_STATUS  Status;
+  UINT32      Crc;
+
+  if (sizeof (gK60ModemMetadata) != K60_MODEM_METADATA_BYTES) {
+    Print (
+      L"modem-image: metadata array is %d bytes, expected %d\n",
+      (UINTN)sizeof (gK60ModemMetadata),
+      (UINTN)K60_MODEM_METADATA_BYTES
+      );
+    return EFI_COMPROMISED_DATA;
+  }
+  if ((K60_MODEM_METADATA_ADDRESS < ABL_STAGING_BASE) ||
+      (K60_MODEM_METADATA_ADDRESS + K60_MODEM_METADATA_BYTES > Carrier->AblEnd)) {
+    Print (
+      L"modem-image: metadata page 0x%lx is outside ABL staging\n",
+      (UINT64)K60_MODEM_METADATA_ADDRESS
+      );
+    return EFI_COMPROMISED_DATA;
+  }
+
+  Status = gBS->CalculateCrc32 ((VOID *)(UINTN)gK60ModemMetadata, sizeof (gK60ModemMetadata), &Crc);
+  if (EFI_ERROR (Status)) {
+    Print (L"modem-image: metadata crc32 failed: %r\n", Status);
+    return EFI_DEVICE_ERROR;
+  }
+
+  CopyMem ((VOID *)(UINTN)K60_MODEM_METADATA_ADDRESS, (VOID *)(UINTN)gK60ModemMetadata, K60_MODEM_METADATA_BYTES);
+  WriteBackDataCacheRange ((VOID *)(UINTN)K60_MODEM_METADATA_ADDRESS, K60_MODEM_METADATA_BYTES);
+
+  Print (
+    L"modem-image: metadata %d bytes crc32 0x%08x at 0x%lx\n",
+    (UINTN)K60_MODEM_METADATA_BYTES,
+    Crc,
+    (UINT64)K60_MODEM_METADATA_ADDRESS
+    );
+  return EFI_SUCCESS;
+}
+
+/**
   Load the carrier named by the generated firmware table.
 
   @param[in]      Root            Volume root, opened by the caller; the
@@ -875,6 +948,13 @@ ImageCarrierLoad (
     Copied += k60_modem_fw_segments[Index].bytes;
     Zeroed += k60_modem_fw_segments[Index].bss;
     Files++;
+  }
+
+  if (!EFI_ERROR (FirstError)) {
+    Status = CarrierLoadMetadata (Carrier);
+    if (EFI_ERROR (Status)) {
+      FirstError = Status;
+    }
   }
 
   FreePool (Scratch);

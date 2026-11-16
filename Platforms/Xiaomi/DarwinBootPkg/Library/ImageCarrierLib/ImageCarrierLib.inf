@@ -22,6 +22,7 @@
   ImageCarrierLib.c
   ImageCarrierLib.h
   K60ModemImageTable.h
+  K60ModemMetadata.h
   ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/LzmaDec.c
   ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/LzmaDec.h
   ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/7zTypes.h
@@ -35,6 +36,7 @@
 [LibraryClasses]
   BaseLib
   BaseMemoryLib
+  CacheMaintenanceLib
   DebugLib
   MemoryAllocationLib
   PrintLib
