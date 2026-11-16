@@ -299,9 +299,25 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
 
     # Check DTB Append Flag
     if image_kernel_config.get ("append_dtb"):
-        # Verify DTB Path
-        if not device_dtb.is_file ():
-            logger.error (f"The Device DTB is Missing in \"{RESOURCE_DTBS_PATH}\"!")
+        # Verify DTB Path and Size
+        #
+        # A missing DTB here used to be reported as a missing file and then
+        # dropped on the floor: the FD had already been built, but the boot image
+        # was never produced, so the only way out was to copy the FD out of
+        # Build/.../FV by hand.  The check now names the real problem, and it
+        # refuses an empty or truncated file as well, because a zero-byte
+        # Resources/DTBs/<board>.dtb would otherwise be appended silently.
+        if not device_dtb.is_file () or device_dtb.stat ().st_size <= 1024:
+            config_file = RESOURCE_CONFIGS_PATH / f"{ctx.device}.toml"
+            logger.error (
+                f"\"{device_dtb}\" is missing or smaller than 1 KiB, but "
+                f"[boot_image_kernel] append_dtb is true in \"{config_file}\"."
+            )
+            logger.error (
+                "This is not a missing file: append_dtb is on, so the boot image "
+                "has to carry a device tree. Compile it with dtc from the board "
+                "source (see Resources/DTBs/MANIFEST.md) and commit the result."
+            )
             return False
 
         # Append DTB
