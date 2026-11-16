@@ -341,12 +341,22 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
     output_file_name = f"Mu-{ctx.device}-{ctx.device_model}.img" if add_output_suffix else f"Mu-{ctx.device}.img"
 
     # Set Base mkbootimg Command
+    #
+    # The ramdisk is optional.  This script packages the UEFI firmware only, and
+    # the tree has never carried a "Resources/ramdisk"; passing the path
+    # unconditionally made mkbootimg.py abort with
+    # "can't open 'Resources/ramdisk'" after the FD had already been built, so
+    # no boot image came out at all.  mkbootimg.py treats an absent ramdisk as
+    # zero bytes (filesize () -> 0) and writes a zero ramdisk_size, which is a
+    # valid header v4 image.
+    ramdisk_path = Path ("Resources/ramdisk")
     cmd = [
         sys.executable, str (mkbootimg),
         "--kernel",     str (android_kernel),
-        "--ramdisk",    "Resources/ramdisk",
-        "-o",           output_file_name
     ]
+    if ramdisk_path.is_file ():
+        cmd += ["--ramdisk", str (ramdisk_path)]
+    cmd += ["-o", output_file_name]
 
     # mkbootimg Argument Map
     argument_map = {
