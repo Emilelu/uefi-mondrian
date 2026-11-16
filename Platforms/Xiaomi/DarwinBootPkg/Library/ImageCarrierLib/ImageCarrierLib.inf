@@ -8,16 +8,26 @@
   LIBRARY_CLASS = ImageCarrierLib
 
 #
-# The read-only half of the modem carrier loader.  It validates the generated
-# table, proves the carveout is still reserved, and checks that the 27 carrier
-# files are present with the sizes the table expects.  The copy into 0x8bc00000
-# and the K60ModemImage property return EFI_UNSUPPORTED until a call site is
-# added, so listing this library in the DSC cannot change a boot by itself.
+# The modem carrier loader: it validates the generated table, proves the
+# carveout is still reserved, decodes the 27 LZMA files straight into
+# 0x8bc00000, and publishes the 16-byte K60ModemImage property.
+#
+# MdeModulePkg has no LzmaDecompressLib library class, so the decoder cannot
+# be bound the usual way; the two source files are compiled here instead.  The
+# SDK directory is self-contained (LzmaDec.c needs no LzFind), and listing the
+# sources is also what puts their directory on the include path for
+# "LzmaDec.h" and "UefiLzma.h" (ModuleAutoGen.py:705-707).
 #
 [Sources]
   ImageCarrierLib.c
   ImageCarrierLib.h
   K60ModemImageTable.h
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/LzmaDec.c
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/LzmaDec.h
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/7zTypes.h
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/Precomp.h
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/Sdk/C/Compiler.h
+  ../../../../../Mu_Basecore/MdeModulePkg/Library/LzmaCustomDecompressLib/UefiLzma.h
 
 [Packages]
   MdePkg/MdePkg.dec

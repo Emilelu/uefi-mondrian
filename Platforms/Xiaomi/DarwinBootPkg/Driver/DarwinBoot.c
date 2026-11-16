@@ -16,6 +16,7 @@
 #include "BootVideo.h"
 #include "PackedRamdisk.h"
 #include "WindowSize.h"
+#include "../Library/ImageCarrierLib/ImageCarrierLib.h"
 
 #define WINDOW_SIZE  SIZE_256MB
 #define BLOCK_SIZE   SIZE_2MB
@@ -663,6 +664,8 @@ Boot (
   UINTN                           OwnedCount = 0;
   CONST CHAR16                    *Stage = L"REQUEST";
   CHAR16                          Failure[96];
+  IMAGE_CARRIER                   Carrier;
+  UINTN                           CarrierOffset;
 
   (VOID)This;
   if ((Request == NULL) || (Request->Volume == NULL) || (Request->KernelPath == NULL)) { return EFI_INVALID_PARAMETER; }
@@ -720,6 +723,14 @@ Boot (
   Stage = L"PARSE ADT";
   if (!AdtNode (Tree, TreeSize, &Offset, 0, 3, &RamdiskOffset, &TrustCacheOffset, &WindowSize, &KeepPacked) || (Offset != TreeSize)) { Status = EFI_COMPROMISED_DATA; goto Fail; }
   if (KeepPacked && (!RamdiskPacked || (RamdiskOffset == MAX_UINTN))) { Status = EFI_COMPROMISED_DATA; goto Fail; }
+  //
+  // The modem carrier goes in before the ramdisk and trustcache checks so a
+  // malformed ADT is still reported first; the carveout is reserved memory,
+  // not a Boot Services resource, so nothing here needs unwinding on failure.
+  //
+  Stage = L"MODEM CARRIER";
+  Status = ImageCarrierLoad (Root, Tree, TreeSize, &Carrier, &CarrierOffset);
+  if (EFI_ERROR (Status)) { goto Fail; }
   if (WindowSize == 0) { WindowSize = WINDOW_SIZE; }
   if (Kernel.Base > MAX_UINT64 - WindowSize) { Status = EFI_LOAD_ERROR; goto Fail; }
   if (Request->Ramdisk != NULL) {
@@ -799,6 +810,23 @@ Boot (
   Args->DeviceTreeLength = (UINT32)TreeSize;
   CopyMem (Args->CommandLine, CommandLine, sizeof (CommandLine));
   CopyMem ((VOID *)(UINTN)TreeAddress, Tree, TreeSize);
+  Print (L"modem-image: chosen dtb at 0x%016lx\n", TreeAddress);
+  Print (L"modem-image: window 0x8bc00000..0x9ee00000\n");
+  Print (L"modem-image: abl staging ends at 0x%016lx\n", Carrier.AblEnd);
+  if (Carrier.Files != 0) {
+    //
+    // Read the placeholder back out of the copy XNU will parse, so a tree that
+    // lost the property between the library and the handoff is caught here
+    // instead of in the kernel.
+    //
+    if ((ReadUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + CarrierOffset)) != Carrier.Base) ||
+        (ReadUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + CarrierOffset + 8)) != Carrier.Span)) {
+      Status = EFI_COMPROMISED_DATA;
+      goto Fail;
+    }
+    Print (L"modem-image: K60ModemImage holds 0x%016lx..0x%016lx\n", Carrier.Base, Carrier.Base + Carrier.Span);
+    Print (L"modem-image: range 0x8bc00000..0x9ee00000 published as K60ModemImage\n");
+  }
   if (mAudioDmaOffset != MAX_UINTN) {
     WriteUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + mAudioDmaOffset), AudioAddress);
     WriteUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + mAudioDmaOffset + 8), AudioAddress ? 65536 : 0);
