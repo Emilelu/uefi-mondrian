@@ -771,29 +771,14 @@ ImageCarrierLoad (
   // line and requires exactly one hit.
   //
   //
-  // The 16-byte placeholder is created at build time.  Finding it here means
-  // a payload built without the modem property refuses to start instead of
-  // loading a carrier nothing will read.
+  // The directory is opened before the placeholder is examined, and that order
+  // is load bearing.  This payload is shared with the display, audio and Wi-Fi
+  // images, which carry no modem property at all; refusing them because the
+  // placeholder is missing would turn every other image into a brick.  A
+  // payload without EFI\UniXNU\MODEM is the one shape that continues to
+  // start (doc 15 section 4.4), so the placeholder is only required once the
+  // carrier directory proves this payload really carries a modem image.
   //
-  Status = AdtFindMemoryMapProperty (Tree, TreeSize, "K60ModemImage", PropertyOffset, &PropertyLength);
-  if (Status == EFI_NOT_FOUND) {
-    Print (L"modem-image: K60ModemImage placeholder missing\n");
-    return EFI_COMPROMISED_DATA;
-  }
-  if (EFI_ERROR (Status)) {
-    Print (L"modem-image: ADT memory-map is malformed\n");
-    return EFI_COMPROMISED_DATA;
-  }
-  if (PropertyLength != sizeof (UINT64) * 2) {
-    Print (L"modem-image: K60ModemImage placeholder is %d bytes, expected 16\n", (UINTN)PropertyLength);
-    return EFI_COMPROMISED_DATA;
-  }
-  if ((ReadUnaligned64 ((CONST UINT64 *)(UINTN)((UINT8 *)Tree + *PropertyOffset)) != 0) ||
-      (ReadUnaligned64 ((CONST UINT64 *)(UINTN)((UINT8 *)Tree + *PropertyOffset + 8)) != 0)) {
-    Print (L"modem-image: range already published\n");
-    return EFI_COMPROMISED_DATA;
-  }
-
   Status = Root->Open (Root, &Dir, (CHAR16 *)mModemDir, EFI_FILE_MODE_READ, 0);
   if (Status == EFI_NOT_FOUND) {
     Print (L"modem-image: no carrier in payload, skipped\n");
@@ -804,6 +789,33 @@ ImageCarrierLoad (
   if (EFI_ERROR (Status)) {
     Print (L"modem-image: open EFI\\UniXNU\\MODEM failed: %r\n", Status);
     return EFI_DEVICE_ERROR;
+  }
+
+  //
+  // A carrier without a property would be copied into a window nothing reads,
+  // so the placeholder is validated before a single byte is moved.
+  //
+  Status = AdtFindMemoryMapProperty (Tree, TreeSize, "K60ModemImage", PropertyOffset, &PropertyLength);
+  if (Status == EFI_NOT_FOUND) {
+    Print (L"modem-image: K60ModemImage placeholder missing\n");
+    Dir->Close (Dir);
+    return EFI_COMPROMISED_DATA;
+  }
+  if (EFI_ERROR (Status)) {
+    Print (L"modem-image: ADT memory-map is malformed\n");
+    Dir->Close (Dir);
+    return EFI_COMPROMISED_DATA;
+  }
+  if (PropertyLength != sizeof (UINT64) * 2) {
+    Print (L"modem-image: K60ModemImage placeholder is %d bytes, expected 16\n", (UINTN)PropertyLength);
+    Dir->Close (Dir);
+    return EFI_COMPROMISED_DATA;
+  }
+  if ((ReadUnaligned64 ((CONST UINT64 *)(UINTN)((UINT8 *)Tree + *PropertyOffset)) != 0) ||
+      (ReadUnaligned64 ((CONST UINT64 *)(UINTN)((UINT8 *)Tree + *PropertyOffset + 8)) != 0)) {
+    Print (L"modem-image: range already published\n");
+    Dir->Close (Dir);
+    return EFI_COMPROMISED_DATA;
   }
 
   //
