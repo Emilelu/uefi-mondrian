@@ -22,6 +22,8 @@ typedef struct {
   UINT32  Gaps;      // Window - Copied - Zeroed, expected 790528
   UINT32  Segments;  // MODEM_IMAGE_SEGMENTS, 30
   UINT32  Reserved;
+  BOOLEAN MetadataCovered;  // a reserved descriptor covers the PAS page
+  BOOLEAN IpaCovered;       // a reserved descriptor covers ipa_fw_region
 } IMAGE_CARRIER;
 
 /**
@@ -52,6 +54,35 @@ ImageCarrierLoad (
   IN  UINTN               TreeSize,
   OUT IMAGE_CARRIER      *Carrier,
   OUT UINTN              *PropertyOffset
+  );
+
+#define K60_IPA_IMAGE_BASE   0x8B900000ULL
+#define K60_IPA_IMAGE_BYTES  0x0000E000ULL
+
+/**
+  Copy the IPA firmware from the payload root into the reserved
+  ipa_fw_region.
+
+  The image is a plain root file, IPA\ipa_fws.mbn, exactly where the build
+  helper injects it.  The destination is the 64 KiB ipa_fw_region at
+  0x8b900000; only the first 0xE000 bytes are used because the PAS metadata
+  page starts at 0x8b90e000.
+
+  @param[in]  Root     Volume root, opened by the caller.
+  @param[in]  Carrier  Filled by ImageCarrierLoad; IpaCovered must be true.
+
+  @retval EFI_SUCCESS           The image was copied, or no IPA directory
+                                exists (pong_ipa=0 images).
+  @retval EFI_NOT_FOUND         The IPA directory exists but the file is gone.
+  @retval EFI_COMPROMISED_DATA  The destination range is not reserved.
+  @retval EFI_DEVICE_ERROR      A read or GetInfo call failed.
+  @retval EFI_BAD_BUFFER_SIZE   The file is empty or larger than 0xE000.
+**/
+EFI_STATUS
+EFIAPI
+ImageIpaLoad (
+  IN  EFI_FILE_PROTOCOL  *Root,
+  IN  CONST IMAGE_CARRIER *Carrier
   );
 
 #endif

@@ -731,6 +731,9 @@ Boot (
   Stage = L"MODEM CARRIER";
   Status = ImageCarrierLoad (Root, Tree, TreeSize, &Carrier, &CarrierOffset);
   if (EFI_ERROR (Status)) { goto Fail; }
+  Stage = L"IPA IMAGE";
+  Status = ImageIpaLoad (Root, &Carrier);
+  if (EFI_ERROR (Status)) { goto Fail; }
   if (WindowSize == 0) { WindowSize = WINDOW_SIZE; }
   if (Kernel.Base > MAX_UINT64 - WindowSize) { Status = EFI_LOAD_ERROR; goto Fail; }
   if (Request->Ramdisk != NULL) {

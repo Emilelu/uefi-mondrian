@@ -150,18 +150,31 @@ CarrierCheckTable (
   return EFI_SUCCESS;
 }
 
+STATIC
+BOOLEAN
+CarrierTypeIsReserved (
+  IN EFI_MEMORY_TYPE  Type
+  )
+{
+  return (BOOLEAN)(Type == EfiReservedMemoryType);
+}
+
 /**
-  Confirm the window is still covered by a reserved descriptor and note
-  where the ABL staging area ends.
+  Confirm the modem window and the IPA firmware region are still covered by
+  reserved descriptors, and locate the PAS metadata page.
 
   The array in MemoryMapLib.c is written at build time; GetMemoryMap reports
   what the HOB processing actually produced, and ABL Staging (MemoryMapLib.c:39)
-  is the precedent for trusting the map over the array.
+  is the precedent for trusting the map over the array.  A merged descriptor
+  that contains the metadata page is accepted; a descriptor that merely starts
+  at 0xB8000000 is not, because that is Display Reserved and does not contain
+  the page.
 
-  @param[in,out]  Carrier  Base and Span are inputs; AblEnd is the output.
+  @param[in,out]  Carrier  Base and Span are inputs; AblEnd is diagnostic and
+                           MetadataCovered/IpaCovered are the gates.
 
-  @retval EFI_SUCCESS           The window is reserved; AblEnd is filled or 0.
-  @retval EFI_DEVICE_ERROR      The window is free or absent from the map.
+  @retval EFI_SUCCESS           Both write ranges are reserved.
+  @retval EFI_DEVICE_ERROR      A range is free, absent or not reserved.
   @retval EFI_OUT_OF_RESOURCES  The descriptor buffer could not be allocated.
 **/
 STATIC
@@ -193,6 +206,8 @@ CarrierScanMap (
   Limit           = Carrier->Base + Carrier->Span;
   Covered         = FALSE;
   Carrier->AblEnd = 0;
+  Carrier->MetadataCovered = FALSE;
+  Carrier->IpaCovered      = FALSE;
 
   for (Attempt = 0; Attempt < 3; Attempt++) {
     Size   = Capacity;
@@ -215,6 +230,10 @@ CarrierScanMap (
     }
     return EFI_DEVICE_ERROR;
   }
+  if (Stride == 0) {
+    FreePool (Map);
+    return EFI_DEVICE_ERROR;
+  }
 
   for (Offset = 0; Offset + Stride <= Size; Offset += Stride) {
     Entry = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Map + Offset);
@@ -224,20 +243,34 @@ CarrierScanMap (
     Start = Entry->PhysicalStart;
     End   = Start + EFI_PAGES_TO_SIZE (Entry->NumberOfPages);
     if ((Start <= Base) && (End >= Limit)) {
-      if (Entry->Type == EfiConventionalMemory) {
+      if (!CarrierTypeIsReserved (Entry->Type)) {
         Print (L"modem-image: window 0x8bc00000..0x9ee00000 is not reserved, refusing\n");
         FreePool (Map);
         return EFI_DEVICE_ERROR;
       }
       Covered = TRUE;
     }
-    if ((Start <= ABL_END_ADDRESS) && (End >= ABL_END_ADDRESS)) {
-      Carrier->AblEnd = ABL_END_ADDRESS;
+    if (CarrierTypeIsReserved (Entry->Type) &&
+        (Start <= K60_MODEM_METADATA_ADDRESS) &&
+        (End >= K60_MODEM_METADATA_ADDRESS + K60_MODEM_METADATA_BYTES)) {
+      Carrier->MetadataCovered = TRUE;
+      Carrier->AblEnd = (End < ABL_END_ADDRESS) ? End : ABL_END_ADDRESS;
+    }
+    if (CarrierTypeIsReserved (Entry->Type) &&
+        (Start <= K60_IPA_IMAGE_BASE) &&
+        (End >= K60_IPA_IMAGE_BASE + K60_IPA_IMAGE_BYTES)) {
+      Carrier->IpaCovered = TRUE;
     }
   }
 
   FreePool (Map);
-  return Covered ? EFI_SUCCESS : EFI_DEVICE_ERROR;
+  if (!Covered) {
+    return EFI_DEVICE_ERROR;
+  }
+  if (!Carrier->MetadataCovered || !Carrier->IpaCovered) {
+    return EFI_DEVICE_ERROR;
+  }
+  return EFI_SUCCESS;
 }
 
 /**
@@ -732,7 +765,8 @@ CarrierLoadSegment (
   names in MODEM_MANIFEST, so a 28th payload file would need a framework
   change.  PAS_INIT_IMAGE reads the blob from this address.
 
-  @param[in]  Carrier  Filled by CarrierScanMap; AblEnd bounds the page.
+  @param[in]  Carrier  Filled by CarrierScanMap; MetadataCovered bounds the
+                       page.  AblEnd is diagnostic only.
 
   @retval EFI_SUCCESS           The blob is in place and the cache is clean.
   @retval EFI_COMPROMISED_DATA  The array size or the page bounds are wrong.
@@ -756,7 +790,8 @@ CarrierLoadMetadata (
     return EFI_COMPROMISED_DATA;
   }
   if ((K60_MODEM_METADATA_ADDRESS < ABL_STAGING_BASE) ||
-      (K60_MODEM_METADATA_ADDRESS + K60_MODEM_METADATA_BYTES > Carrier->AblEnd)) {
+      (K60_MODEM_METADATA_ADDRESS + K60_MODEM_METADATA_BYTES > ABL_END_ADDRESS) ||
+      !Carrier->MetadataCovered) {
     Print (
       L"modem-image: metadata page 0x%lx is outside ABL staging\n",
       (UINT64)K60_MODEM_METADATA_ADDRESS
@@ -1009,4 +1044,125 @@ ImageCarrierLoad (
     (UINTN)Carrier->Gaps
     );
   return EFI_SUCCESS;
+}
+
+/**
+  Copy IPA\ipa_fws.mbn from the payload root into the reserved ipa_fw_region.
+
+  The PAS metadata page starts at 0x8b90e000, so the image is limited to the
+  first 0xE000 bytes of the 64 KiB region.  The region is registered as
+  WRITE_BACK_XN, hence the explicit clean before XNU reads it.
+
+  @param[in]  Root     Volume root, opened by the caller.
+  @param[in]  Carrier  Filled by ImageCarrierLoad; IpaCovered must be true.
+
+  @retval EFI_SUCCESS           The image was copied, or no IPA directory
+                                exists (pong_ipa=0 images).
+  @retval EFI_NOT_FOUND         The IPA directory exists but the file is gone.
+  @retval EFI_COMPROMISED_DATA  The destination range is not reserved.
+  @retval EFI_DEVICE_ERROR      A read or GetInfo call failed.
+  @retval EFI_BAD_BUFFER_SIZE   The file is empty or larger than 0xE000.
+**/
+EFI_STATUS
+EFIAPI
+ImageIpaLoad (
+  IN  EFI_FILE_PROTOCOL  *Root,
+  IN  CONST IMAGE_CARRIER *Carrier
+  )
+{
+  EFI_STATUS       Status;
+  EFI_FILE_PROTOCOL *Dir;
+  EFI_FILE_PROTOCOL *File;
+  EFI_FILE_INFO    *Info;
+  UINTN            InfoSize;
+  UINTN            Read;
+
+  if ((Root == NULL) || (Carrier == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+  if (!Carrier->IpaCovered) {
+    Print (L"ipa-image: ipa_fw_region 0x8b900000..0x8b90e000 is not reserved\n");
+    return EFI_COMPROMISED_DATA;
+  }
+
+  Dir  = NULL;
+  File = NULL;
+  Info = NULL;
+  Status = Root->Open (Root, &Dir, L"\\IPA", EFI_FILE_MODE_READ, 0);
+  if (Status == EFI_NOT_FOUND) {
+    Print (L"ipa-image: no IPA directory, skipped\n");
+    return EFI_SUCCESS;
+  }
+  if (EFI_ERROR (Status)) {
+    Print (L"ipa-image: open IPA failed: %r\n", Status);
+    return EFI_DEVICE_ERROR;
+  }
+
+  Status = Dir->Open (Dir, &File, L"ipa_fws.mbn", EFI_FILE_MODE_READ, 0);
+  if (Status == EFI_NOT_FOUND) {
+    Print (L"ipa-image: IPA\\ipa_fws.mbn missing\n");
+    Status = EFI_NOT_FOUND;
+    goto Done;
+  }
+  if (EFI_ERROR (Status)) {
+    Print (L"ipa-image: open ipa_fws.mbn failed: %r\n", Status);
+    Status = EFI_DEVICE_ERROR;
+    goto Done;
+  }
+
+  InfoSize = 0;
+  Status = File->GetInfo (File, &gEfiFileInfoGuid, &InfoSize, NULL);
+  if (Status != EFI_BUFFER_TOO_SMALL) {
+    Print (L"ipa-image: GetInfo size failed: %r\n", Status);
+    Status = EFI_DEVICE_ERROR;
+    goto Done;
+  }
+  Info = AllocatePool (InfoSize);
+  if (Info == NULL) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto Done;
+  }
+  Status = File->GetInfo (File, &gEfiFileInfoGuid, &InfoSize, Info);
+  if (EFI_ERROR (Status)) {
+    Print (L"ipa-image: GetInfo failed: %r\n", Status);
+    Status = EFI_DEVICE_ERROR;
+    goto Done;
+  }
+  if (((Info->Attribute & EFI_FILE_DIRECTORY) != 0) ||
+      (Info->FileSize == 0) ||
+      (Info->FileSize > K60_IPA_IMAGE_BYTES)) {
+    Print (L"ipa-image: file size 0x%lx is outside 1..0x%lx\n",
+      (UINT64)Info->FileSize, (UINT64)K60_IPA_IMAGE_BYTES);
+    Status = EFI_BAD_BUFFER_SIZE;
+    goto Done;
+  }
+
+  ZeroMem ((VOID *)(UINTN)K60_IPA_IMAGE_BASE, (UINTN)K60_IPA_IMAGE_BYTES);
+  Read = (UINTN)Info->FileSize;
+  Status = File->Read (File, &Read, (VOID *)(UINTN)K60_IPA_IMAGE_BASE);
+  if (EFI_ERROR (Status)) {
+    Print (L"ipa-image: read failed: %r\n", Status);
+    Status = EFI_DEVICE_ERROR;
+    goto Done;
+  }
+  if (Read != (UINTN)Info->FileSize) {
+    Print (L"ipa-image: short read %d of %d\n", Read, (UINTN)Info->FileSize);
+    Status = EFI_DEVICE_ERROR;
+    goto Done;
+  }
+  WriteBackDataCacheRange ((VOID *)(UINTN)K60_IPA_IMAGE_BASE, Read);
+  Print (L"ipa-image: %d bytes at 0x%lx\n", Read, (UINT64)K60_IPA_IMAGE_BASE);
+  Status = EFI_SUCCESS;
+
+Done:
+  if (Info != NULL) {
+    FreePool (Info);
+  }
+  if (File != NULL) {
+    File->Close (File);
+  }
+  if (Dir != NULL) {
+    Dir->Close (Dir);
+  }
+  return Status;
 }
