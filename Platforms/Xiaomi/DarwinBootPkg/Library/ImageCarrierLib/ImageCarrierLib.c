@@ -683,6 +683,19 @@ CarrierLoadSegment (
     return EFI_COMPROMISED_DATA;
   }
 
+  //
+  // The header probe advanced the file position.  Rewind before the full-file
+  // read: otherwise the read starts at CARRIER_HEADER_SIZE and comes up short
+  // by exactly that many bytes, which the caller reports as EFI_DEVICE_ERROR
+  // and the loader never reaches the kernel.
+  //
+  Status = File->SetPosition (File, 0);
+  if (EFI_ERROR (Status)) {
+    File->Close (File);
+    Print (L"modem-image: rewind %a failed: %r\n", Name, Status);
+    return EFI_DEVICE_ERROR;
+  }
+
   Source = AllocatePool ((UINTN)FileSize);
   if (Source == NULL) {
     File->Close (File);
