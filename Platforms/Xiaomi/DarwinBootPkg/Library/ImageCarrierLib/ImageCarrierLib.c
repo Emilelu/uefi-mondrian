@@ -231,8 +231,8 @@ CarrierScanMap (
       }
       Covered = TRUE;
     }
-    if (Start == ABL_END_ADDRESS) {
-      Carrier->AblEnd = Start;
+    if ((Start <= ABL_END_ADDRESS) && (End >= ABL_END_ADDRESS)) {
+      Carrier->AblEnd = ABL_END_ADDRESS;
     }
   }
 
