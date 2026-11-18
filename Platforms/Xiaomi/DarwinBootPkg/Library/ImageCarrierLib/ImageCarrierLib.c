@@ -819,6 +819,7 @@ ImageCarrierLoad (
     return EFI_INVALID_PARAMETER;
   }
 
+  DEBUG ((DEBUG_ERROR, "carrier: enter root=%p tree=%p size=%u\n", Root, Tree, (UINT32)TreeSize));
   ZeroMem (Carrier, sizeof (*Carrier));
   Carrier->Base     = MODEM_IMAGE_BASE;
   Carrier->Span     = MODEM_IMAGE_WINDOW;
@@ -829,11 +830,13 @@ ImageCarrierLoad (
   }
 
   Status = CarrierCheckTable ();
+  DEBUG ((DEBUG_ERROR, "carrier: table status=%r\n", Status));
   if (EFI_ERROR (Status)) {
     return Status;
   }
 
   Status = CarrierScanMap (Carrier);
+  DEBUG ((DEBUG_ERROR, "carrier: map status=%r abl=0x%lx\n", Status, Carrier->AblEnd));
   if (EFI_ERROR (Status)) {
     return Status;
   }
@@ -852,7 +855,9 @@ ImageCarrierLoad (
   // start (doc 15 section 4.4), so the placeholder is only required once the
   // carrier directory proves this payload really carries a modem image.
   //
+  DEBUG ((DEBUG_ERROR, "carrier: opening modem dir\n"));
   Status = Root->Open (Root, &Dir, (CHAR16 *)mModemDir, EFI_FILE_MODE_READ, 0);
+  DEBUG ((DEBUG_ERROR, "carrier: dir status=%r\n", Status));
   if (Status == EFI_NOT_FOUND) {
     Print (L"modem-image: no carrier in payload, skipped\n");
     *PropertyOffset = 0;
@@ -891,12 +896,16 @@ ImageCarrierLoad (
     return EFI_COMPROMISED_DATA;
   }
 
+  DEBUG ((DEBUG_ERROR, "carrier: placeholder ok\n"));
+
   //
   // A missing sentinel is the one failure that cannot be confused with an
   // empty directory, so it is checked once before the loop starts reporting
   // per-segment errors.
   //
+  DEBUG ((DEBUG_ERROR, "carrier: sentinel %a\n", CARRIER_SENTINEL));
   Status = CarrierOpenFile (Dir, CARRIER_SENTINEL, &Probe, &ProbeSize);
+  DEBUG ((DEBUG_ERROR, "carrier: sentinel status=%r size=0x%lx\n", Status, ProbeSize));
   if (Status == EFI_NOT_FOUND) {
     Print (L"modem-image: %a missing\n", CARRIER_SENTINEL);
     Dir->Close (Dir);
@@ -919,6 +928,7 @@ ImageCarrierLoad (
   Copied     = 0;
   Zeroed     = 0;
   FirstError = EFI_SUCCESS;
+  DEBUG ((DEBUG_ERROR, "carrier: segments begin\n"));
   for (Index = 0; Index < MODEM_IMAGE_SEGMENTS; Index++) {
     Target = k60_modem_fw_segments[Index].paddr;
     if (k60_modem_fw_segments[Index].bytes == 0) {
@@ -926,6 +936,7 @@ ImageCarrierLoad (
       Zeroed += k60_modem_fw_segments[Index].bss;
       continue;
     }
+    DEBUG ((DEBUG_ERROR, "carrier: seg %u %a\n", (UINT32)Index, k60_modem_fw_segments[Index].name));
     Status = CarrierLoadSegment (
                Dir,
                k60_modem_fw_segments[Index].name,
@@ -934,6 +945,7 @@ ImageCarrierLoad (
                Scratch,
                &Decoded
                );
+    DEBUG ((DEBUG_ERROR, "carrier: seg %u status=%r decoded=0x%lx\n", (UINT32)Index, Status, (UINT64)Decoded));
     if (EFI_ERROR (Status)) {
       //
       // Keep scanning: one bad file must not hide the state of the other 26.
@@ -950,8 +962,10 @@ ImageCarrierLoad (
     Files++;
   }
 
+  DEBUG ((DEBUG_ERROR, "carrier: metadata begin first=%r\n", FirstError));
   if (!EFI_ERROR (FirstError)) {
     Status = CarrierLoadMetadata (Carrier);
+    DEBUG ((DEBUG_ERROR, "carrier: metadata status=%r\n", Status));
     if (EFI_ERROR (Status)) {
       FirstError = Status;
     }
@@ -960,6 +974,7 @@ ImageCarrierLoad (
   FreePool (Scratch);
   Dir->Close (Dir);
 
+  DEBUG ((DEBUG_ERROR, "carrier: finish files=%u copied=0x%lx\n", Files, Copied));
   Carrier->Files  = Files;
   Carrier->Copied = (UINT32)Copied;
   Carrier->Zeroed = (UINT32)Zeroed;
