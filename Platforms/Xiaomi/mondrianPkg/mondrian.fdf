@@ -83,6 +83,10 @@ READ_LOCK_STATUS   = TRUE
   !include Include/DXE.inc
   !include Include/RAW.inc
 
+  # K60: report what the previous boot left in the pong ramoops console window
+  # before anything else can touch it. Read-only; an empty window is a result.
+  INF mondrianPkg/Drivers/RamoopsDumpDxe/RamoopsDumpDxe.inf
+
   # UniXNU application, firmware boot registrar and XNU loader.
   INF UniXNUPkg/Application/UniXNU/UniXNU.inf
   INF UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf

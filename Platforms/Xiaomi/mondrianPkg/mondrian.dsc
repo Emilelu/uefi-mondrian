@@ -138,6 +138,7 @@
   UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
   mondrianPkg/Drivers/AdvLogDxe/AdvLogDxe.inf
   mondrianPkg/Drivers/MondrianBootMemoryDxe/MondrianBootMemoryDxe.inf
+  mondrianPkg/Drivers/RamoopsDumpDxe/RamoopsDumpDxe.inf
   mondrianPkg/Test/MondrianPayloadProbe/MondrianPayloadProbe.inf
   mondrianPkg/Test/MondrianInitrdTest/MondrianInitrdTest.inf
 
