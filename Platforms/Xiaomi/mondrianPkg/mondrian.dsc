@@ -71,6 +71,10 @@
   # UniXNU boot manager core; DarwinBoot provides the XNU loader protocol.
   UniXNULib|UniXNUPkg/Library/UniXNULib/UniXNULib.inf
 
+  # porting/uefi-firmware.md#required-integration fixes these two mappings.
+  HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
+  FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
+
   # Advanced Logger chain (official log-capture integration)
   AdvancedLoggerLib|AdvLoggerPkg/Library/AdvancedLoggerLib/DxeCore/AdvancedLoggerLib.inf
   AdvancedLoggerAccessLib|AdvLoggerPkg/Library/AdvancedLoggerAccessLib/AdvancedLoggerAccessLib.inf
@@ -128,6 +132,9 @@
   UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf
   DarwinBootPkg/Driver/DarwinBoot.inf
   UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
+  # The page requires the disk and FAT drivers in [Components] as well as in the volume.
+  MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf
+  FatPkg/EnhancedFatDxe/Fat.inf
   UniXNUPkg/Driver/AdvancedLogDxe/AdvancedLogDxe.inf
   mondrianPkg/Drivers/AdvLogDxe/AdvLogDxe.inf
   mondrianPkg/Drivers/MondrianBootMemoryDxe/MondrianBootMemoryDxe.inf

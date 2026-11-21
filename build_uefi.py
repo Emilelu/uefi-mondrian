@@ -31,6 +31,14 @@ RESOURCE_DTBS_PATH    = Path ("Resources/DTBs")
 RESOURCE_PATCHES_PATH = Path ("Resources/MuPatches")
 RESOURCE_SCRIPTS_PATH = Path ("Resources/Scripts")
 
+# Patches whose change has since landed in Mu_Basecore itself. At the current pin
+# (6f805f2) they no longer apply, and they must not be forced back in by pinning an
+# older basecore. Verified with `git apply --check` at 6f805f2: every other patch in
+# Resources/MuPatches still applies.
+UPSTREAMED_PATCHES = frozenset ({
+    "AsmMacroLib.patch",   # ASM_FUNC section naming; Mu_Basecore now guards it with #ifdef __ELF__
+})
+
 #
 # MU Submodule Paths
 #
@@ -534,6 +542,12 @@ def main ():
     # Apply Mu_Basecore Patches
     for patch_name in ["AsmMacroLib.patch", "Auth-Service.patch", "Boot-Manager.patch", "Timer.patch", "Usb-Bus.patch", "K60-Exception-Image.patch"]:
         if not handle_git_patch (MU_BASECORE_PATH, patch_name, False):
+            if patch_name in UPSTREAMED_PATCHES:
+                # The fix now lives in Mu_Basecore itself, so the local patch no longer
+                # applies. Skipping is correct: reverting to an older basecore to keep an
+                # obsolete patch alive is what breaks the firmware.
+                logger.warning (f"\"{patch_name}\" is already upstream at this Mu_Basecore revision; skipping")
+                continue
             logger.error (f"Failed to Apply \"{patch_name}\" Git Patch!")
             sys.exit (1)
 
