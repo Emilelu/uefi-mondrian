@@ -128,7 +128,7 @@ Done:
 
 STATIC
 EFI_STATUS
-ParseKernelHeader (CONST UINT8 *Data, UINTN Size, UINTN Header, KERNEL *Kernel)
+ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
 {
   UINTN    Offset;
   UINTN    End;
@@ -141,19 +141,15 @@ ParseKernelHeader (CONST UINT8 *Data, UINTN Size, UINTN Header, KERNEL *Kernel)
   BOOLEAN  HasEntry;
   BOOLEAN  Executable;
 
-  if ((Header > Size) || (Size - Header < 32) ||
-      (U32 (Data + Header) != 0xfeedfacf) || (U32 (Data + Header + 4) != 0x100000c) ||
-      (((U32 (Data + Header + 8) & 0x00ffffff) != 0) &&
-       ((U32 (Data + Header + 8) & 0x00ffffff) != 2)) ||
-      ((U32 (Data + Header + 12) != 2) &&
-       ((Header != 0) || (U32 (Data + Header + 12) != 12)))) {
+  if ((Size < 32) || (U32 (Data) != 0xfeedfacf) || (U32 (Data + 4) != 0x100000c) ||
+      (U32 (Data + 8) != 0) || (U32 (Data + 12) != 2)) {
     return EFI_UNSUPPORTED;
   }
-  if (U32 (Data + Header + 20) > Size - Header - 32) { return EFI_LOAD_ERROR; }
+  if (U32 (Data + 20) > Size - 32) { return EFI_LOAD_ERROR; }
   ZeroMem (Kernel, sizeof (*Kernel));
-  Count = U32 (Data + Header + 16);
-  End = Header + 32 + U32 (Data + Header + 20);
-  Offset = Header + 32;
+  Count = U32 (Data + 16);
+  End = 32 + U32 (Data + 20);
+  Offset = 32;
   HasEntry = FALSE;
   for (Index = 0; Index < Count; Index++) {
     if (End - Offset < 8) { return EFI_LOAD_ERROR; }
@@ -200,86 +196,6 @@ ParseKernelHeader (CONST UINT8 *Data, UINTN Size, UINTN Header, KERNEL *Kernel)
       (Kernel->Base > MAX_UINT64 - WINDOW_SIZE) ||
       (Kernel->End - Kernel->Base > WINDOW_SIZE - SIZE_2MB)) { return EFI_LOAD_ERROR; }
   return EFI_SUCCESS;
-}
-
-// Fileset segment offsets are absolute in the collection. XNU rebases and
-// signs its own fixup chains after entry; firmware only copies root mappings.
-STATIC
-EFI_STATUS
-ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
-{
-  EFI_STATUS Status;
-  KERNEL     Member;
-  UINTN      Offset;
-  UINTN      End;
-  UINTN      Header;
-  UINTN      Name;
-  UINTN      Index;
-  UINTN      Other;
-  UINT32     Length;
-  BOOLEAN    Found;
-  BOOLEAN    Covered;
-  SEGMENT    *Child;
-  SEGMENT    *Parent;
-
-  Status = ParseKernelHeader (Data, Size, 0, Kernel);
-  if (EFI_ERROR (Status) || (U32 (Data + 12) != 12)) { return Status; }
-  Offset = 32;
-  End = 32 + U32 (Data + 20);
-  Found = FALSE;
-  while (Offset < End) {
-    Length = U32 (Data + Offset + 4);
-    if (U32 (Data + Offset) == 0x80000035) {
-      if (Length < 40) { return EFI_LOAD_ERROR; }
-      Name = U32 (Data + Offset + 24);
-      if ((Name < 32) || (Name >= Length)) { return EFI_LOAD_ERROR; }
-      for (Index = Name; (Index < Length) && (Data[Offset + Index] != 0); Index++) {}
-      if (Index == Length) { return EFI_LOAD_ERROR; }
-      Header = U64 (Data + Offset + 16);
-      if ((Header > Size) || (Size - Header < 32) || (Header & 7)) { return EFI_LOAD_ERROR; }
-      // Every indexed header must actually be loaded at its advertised VA.
-      Covered = FALSE;
-      for (Other = 0; Other < Kernel->Count; Other++) {
-        Parent = &Kernel->Segments[Other];
-        if ((Header >= Parent->FileOffset) &&
-            (Header - Parent->FileOffset <= Parent->FileSize) &&
-            (32 <= Parent->FileSize - (Header - Parent->FileOffset)) &&
-            (U64 (Data + Offset + 8) == Parent->Address + Header - Parent->FileOffset)) {
-          Covered = TRUE;
-        }
-      }
-      if (!Covered) { return EFI_LOAD_ERROR; }
-      if ((Index - Name == sizeof ("com.apple.kernel") - 1) &&
-          (CompareMem (Data + Offset + Name, "com.apple.kernel", sizeof ("com.apple.kernel")) == 0)) {
-        if (Found || (U32 (Data + Header + 12) != 2) ||
-            (U32 (Data + Header + 8) != U32 (Data + 8)) ||
-            ((U32 (Data + Header + 24) & 0x80000000) == 0)) { return EFI_LOAD_ERROR; }
-        Found = TRUE;
-        Status = ParseKernelHeader (Data, Size, Header, &Member);
-        if (EFI_ERROR (Status) || (Member.Entry != Kernel->Entry)) { return EFI_LOAD_ERROR; }
-        for (Index = 0; Index < Member.Count; Index++) {
-          Child = &Member.Segments[Index];
-          Covered = FALSE;
-          for (Other = 0; Other < Kernel->Count; Other++) {
-            Parent = &Kernel->Segments[Other];
-            if ((Child->Address >= Parent->Address) &&
-                (Child->Address - Parent->Address <= Parent->Size) &&
-                (Child->Size <= Parent->Size - (Child->Address - Parent->Address)) &&
-                ((Child->Protection & ~Parent->Protection) == 0) &&
-                ((Child->FileSize == 0) ||
-                 ((Child->Address - Parent->Address <= Parent->FileSize) &&
-                  (Child->FileSize <= Parent->FileSize - (Child->Address - Parent->Address)) &&
-                  (Child->FileOffset == Parent->FileOffset + Child->Address - Parent->Address)))) {
-              Covered = TRUE;
-            }
-          }
-          if (!Covered) { return EFI_LOAD_ERROR; }
-        }
-      }
-    }
-    Offset += Length;
-  }
-  return Found ? EFI_SUCCESS : EFI_LOAD_ERROR;
 }
 
 STATIC UINTN mAudioDmaOffset = MAX_UINTN;
