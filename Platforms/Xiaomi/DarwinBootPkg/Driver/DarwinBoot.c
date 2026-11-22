@@ -586,6 +586,47 @@ GopFillBar (
 }
 
 /**
+  Draw a ruler the panel cannot fake: four bars on the four edges of the mode
+  the firmware believes it has, plus a cross at its centre.  If the bars hug the
+  panel edges the GOP geometry matches the visible area; if a bar floats inside
+  the panel the mode is wider or taller than the glass.
+
+  The cross is drawn as two thin Blt fills so it needs no font.
+**/
+STATIC
+VOID
+GopRuler (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop
+  )
+{
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Blue    = { 0xFF, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red     = { 0x00, 0x00, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Yellow  = { 0x00, 0xFF, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Green   = { 0x00, 0xFF, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Magenta = { 0xFF, 0x00, 0xFF, 0 };
+  UINTN                          Width, Height;
+
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+
+  /* left blue, right red */
+  GopFillBar (Gop, Blue, 0, 8);
+  GopFillBar (Gop, Red, (Width > 8) ? (Width - 8) : 0, 8);
+  /* top yellow, bottom green, drawn as horizontal fills */
+  Gop->Blt (Gop, &Yellow, EfiBltVideoFill, 0, 0, 0, 0, Width, 8, 0);
+  if (Height > 8) {
+    Gop->Blt (Gop, &Green, EfiBltVideoFill, 0, 0, 0, Height - 8, Width, 8, 0);
+  }
+  /* centre cross: one vertical bar and one horizontal bar, both magenta */
+  GopFillBar (Gop, Magenta, Width / 2, 8);
+  Gop->Blt (Gop, &Magenta, EfiBltVideoFill, 0, 0, 0, Height / 2, Width, 8, 0);
+  gBS->Stall (3000000);
+  DEBUG ((DEBUG_ERROR, "GOP RULER: width %lu height %lu pitch %lu base 0x%lx\n",
+          Width, Height, Gop->Mode->Info->PixelsPerScanLine,
+          Gop->Mode->FrameBufferBase));
+}
+
+/**
   The hand-off witness, drawn the way the menu draws: red, then blue, then eight
   black and white bars, one second each, and the bars held for two more seconds.
 
@@ -1192,7 +1233,8 @@ Boot (
     // underneath.  If the quadrants are still on screen after the hand-off, the
     // display survived ExitBootServices and the kernel is what never wrote.
     //
-    GopQuadrants ();
+    GopRuler ();
+  GopQuadrants ();
     Status = gBS->ExitBootServices (mImage, Key);
     if (!EFI_ERROR (Status)) {
       // All writes by this loader are in [Address, Address + Used): Mach-O
