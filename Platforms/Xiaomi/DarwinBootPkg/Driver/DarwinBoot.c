@@ -1052,6 +1052,26 @@ Boot (
   DEBUG ((DEBUG_ERROR, "ID_AA64PFR0_EL1  0x%lx\n", READ_SYSREG (id_aa64pfr0_el1)));
   DEBUG ((DEBUG_ERROR, "owned trampoline pa 0x%lx (%lu bytes)\n", TrampolineAddress, (UINT64)TrampolineBytes));
   DEBUG ((DEBUG_ERROR, "\nExiting boot services. A green bar means the loader\ntrampoline ran; payload entry is not yet confirmed.\n"));
+  //
+  // The same three facts through the console the menu already draws with, not
+  // through the frame-buffer serial port. On this board the direct writes to
+  // Video[0] are the ones that go missing (the red fill and the green bar are
+  // both drawn that way and neither reached the panel, while menu text did),
+  // so this block is the control: if it shows up, the display still works up
+  // to ExitBootServices and the loss is on the other side of the hand-off.
+  //
+  {
+    CHAR16 Buffer[160];
+    UnicodeSPrint (Buffer, sizeof (Buffer),
+                   L"HANDOFF va=0x%lx entry=0x%lx video=0x%lx\r\n"
+                   L"entry words %08x %08x %08x %08x\r\n",
+                   Kernel.Base, Address + Kernel.Entry - Kernel.Base, Video[0],
+                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base)),
+                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 4)),
+                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 8)),
+                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 12)));
+    gST->ConOut->OutputString (gST->ConOut, Buffer);
+  }
   for (Attempt = 0; Attempt < 3; Attempt++) {
     MapSize = Capacity;
     Status = gBS->GetMemoryMap (&MapSize, Map, &Key, &Stride, &Version);
