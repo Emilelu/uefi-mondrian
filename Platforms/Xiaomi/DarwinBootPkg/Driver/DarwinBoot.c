@@ -587,6 +587,103 @@ FillScreen (
   return;
 }
 
+/**
+  Paint the whole screen through the firmware's GOP Blt, which is the call the
+  graphics menu draws with.
+
+  Every direct write into Video[0] from this loader has so far reached the panel
+  zero times, while the menu - drawn with Blt - is shown normally.  Blt is
+  therefore the only drawing call with a proven record on this board, so the
+  hand-off witness has to go through it instead of through FillScreen.
+**/
+STATIC
+EFI_STATUS
+GopFill (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop,
+  IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Colour
+  )
+{
+  return Gop->Blt (Gop, &Colour, EfiBltVideoFill, 0, 0, 0, 0,
+                   Gop->Mode->Info->HorizontalResolution,
+                   Gop->Mode->Info->VerticalResolution, 0);
+}
+
+/**
+  The same fill restricted to one vertical bar; used for the striped frame.
+**/
+STATIC
+EFI_STATUS
+GopFillBar (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop,
+  IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Colour,
+  IN UINTN                          X,
+  IN UINTN                          Width
+  )
+{
+  return Gop->Blt (Gop, &Colour, EfiBltVideoFill, 0, 0, X, 0, Width,
+                   Gop->Mode->Info->VerticalResolution, 0);
+}
+
+/**
+  The hand-off witness, drawn the way the menu draws: red, then blue, then eight
+  black and white bars, one second each, and the bars held for two more seconds.
+
+  Three different pictures rather than one, because a single colour cannot be
+  told apart from the last frame the menu left behind: red -> blue -> bars can
+  only happen if Blt ran three times and the panel followed it.  Nothing here
+  may stop the boot; a missing protocol or a refused blit prints one line and
+  returns to the hand-off.
+**/
+STATIC
+VOID
+GopWitness (VOID)
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red   = { 0x00, 0x00, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Blue  = { 0xFF, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
+  CHAR16                         Line[128];
+  UINTN                          Width, Height, Bar, X, Next;
+
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL) || (Gop->Mode->Info == NULL)) {
+    UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: no graphics output protocol (%r), nothing drawn\r\n", Status);
+    gST->ConOut->OutputString (gST->ConOut, Line);
+    DEBUG ((DEBUG_ERROR, "GOP WITNESS: no graphics output protocol, nothing drawn\n"));
+    return;
+  }
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+  UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: blt %lux%lu, red blue bars\r\n", Width, Height);
+  gST->ConOut->OutputString (gST->ConOut, Line);
+  DEBUG ((DEBUG_ERROR, "GOP WITNESS: blt mode %u %lux%lu\n", (UINT32)Gop->Mode->Mode, Width, Height));
+
+  Status = GopFill (Gop, Red);
+  if (EFI_ERROR (Status)) {
+    UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: blt refused (%r), continuing to the hand-off\r\n", Status);
+    gST->ConOut->OutputString (gST->ConOut, Line);
+    return;
+  }
+  gBS->Stall (1000000);
+  GopFill (Gop, Blue);
+  gBS->Stall (1000000);
+  GopFill (Gop, Black);
+  if (Width >= 8) {
+    for (Bar = 1; Bar < 8; Bar += 2) {
+      X    = (Width / 8) * Bar;
+      Next = (Bar == 7) ? Width : (Width / 8) * (Bar + 1);
+      GopFillBar (Gop, White, X, Next - X);
+    }
+  }
+  gBS->Stall (1000000);
+  gBS->Stall (2000000);
+  DEBUG ((DEBUG_ERROR, "GOP WITNESS: red, blue and the eight bars were blitted\n"));
+  return;
+}
+
 STATIC
 VOID
 HandoffStage (CONST UINT64 Video[6], CONST CHAR16 *Text, UINT64 Status)
@@ -1071,6 +1168,13 @@ Boot (
                    Kernel.Base, Address + Kernel.Entry - Kernel.Base, Video[0]);
     gST->ConOut->OutputString (gST->ConOut, Buffer);
   }
+  //
+  // Last picture before the hand-off, through the menu's own drawing call: red,
+  // blue, then eight bars, five seconds in total.  Direct writes have been
+  // invisible here three times; if these frames show, Blt is the difference and
+  // the panel is still alive at ExitBootServices.
+  //
+  GopWitness ();
   for (Attempt = 0; Attempt < 3; Attempt++) {
     MapSize = Capacity;
     Status = gBS->GetMemoryMap (&MapSize, Map, &Key, &Stride, &Version);
