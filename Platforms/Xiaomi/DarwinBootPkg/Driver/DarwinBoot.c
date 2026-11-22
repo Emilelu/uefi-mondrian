@@ -548,6 +548,36 @@ DiagDraw (CONST CHAR16 *Text, UINTN Row)
   if (!EFI_ERROR (ReadBootVideo (Video)) && Video[0]) { DiagDrawVideo (Text, Row, Video); }
 }
 
+/**
+  Paint the whole frame buffer one colour.
+
+  Used as a witness right before ExitBootServices: if the screen goes red here and
+  never goes green in the trampoline, the panel stopped displaying at the hand-off
+  instead of the code failing to run.  Those two need different fixes and a black
+  screen cannot tell them apart.
+**/
+STATIC
+VOID
+FillScreen (
+  IN CONST UINT64  Video[6],
+  IN UINT32        Colour
+  )
+{
+  UINT32  *Row;
+  UINTN    Pixels;
+  UINTN    Index;
+
+  if (Video[0] == 0 || Video[2] == 0 || Video[4] == 0) {
+    return;
+  }
+  Pixels = (UINTN)(Video[2] / 4) * (UINTN)Video[4];
+  Row    = (UINT32 *)(UINTN)Video[0];
+  for (Index = 0; Index < Pixels; Index++) {
+    Row[Index] = Colour;
+  }
+  return;
+}
+
 STATIC
 VOID
 HandoffStage (CONST UINT64 Video[6], CONST CHAR16 *Text, UINT64 Status)
@@ -1021,6 +1051,7 @@ Boot (
       if (Attempt == 0) { goto Fail; }
       CpuDeadLoop ();
     }
+    FillScreen (Video, 0x00FF0000);
     HandoffStage (Video, L"EXIT CALL", Attempt);
     Status = gBS->ExitBootServices (mImage, Key);
     HandoffStage (Video, L"EXIT RETURN", Status);
