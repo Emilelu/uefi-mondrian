@@ -596,9 +596,11 @@ GopFillBar (
 STATIC
 VOID
 GopRuler (
-  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop
+  VOID
   )
 {
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Blue    = { 0xFF, 0x00, 0x00, 0 };
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red     = { 0x00, 0x00, 0xFF, 0 };
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Yellow  = { 0x00, 0xFF, 0xFF, 0 };
@@ -606,6 +608,11 @@ GopRuler (
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Magenta = { 0xFF, 0x00, 0xFF, 0 };
   UINTN                          Width, Height;
 
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL)) {
+    return;
+  }
   Width  = Gop->Mode->Info->HorizontalResolution;
   Height = Gop->Mode->Info->VerticalResolution;
 
