@@ -8,19 +8,22 @@
   anything else touches the window and dumps the header plus the head and tail
   of the ring to the firmware console.
 
-  It never writes. If firmware or the previous boot left no magic, it says so
-  and returns; an empty window is a result, not a failure.
+  It never writes. If the window carries no magic it says so and returns; an
+  empty window means the kernel never reached its console init, which is itself
+  the answer. The translation is probed before the first read because this pin's
+  ArmPkg has no ArmMmuLib header to fix a fault with: an unmapped window is
+  reported, not faulted on.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 #include <Uefi.h>
-#include <Library/ArmMmuLib.h>
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/DebugLib.h>
-#include <Library/UefiLib.h>
+#include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiDriverEntryPoint.h>
+#include <Library/UefiLib.h>
 
 #define RAMOOPS_PHYS_BASE  0xA7000000ULL
 #define RAMOOPS_BYTES      0x00200000U
@@ -28,8 +31,8 @@
 #define RAMOOPS_DATA       (RAMOOPS_BYTES - RAMOOPS_HEADER)
 #define RAMOOPS_MAGIC      0x43474244U
 
-// How much of the ring is worth showing: the console ends with the interesting
-// line and starts with the boot banner, so show both and elide the middle.
+// The console ends with the interesting line and starts with the boot banner,
+// so show both ends and elide the middle.
 #define SHOW_HEAD          1200U
 #define SHOW_TAIL          2400U
 #define LINE_WIDTH         96U
@@ -39,10 +42,10 @@ typedef struct {
   UINT32 Sig;
   UINT32 Start;
   UINT32 Size;
-} RAMOOPS_HEADER;
+} RAMOOPS_HDR;
 #pragma pack()
 
-STATIC UINT16 mColumn;
+STATIC UINT32 mColumn;
 
 STATIC VOID Emit (CONST CHAR8 *Text, UINTN Length) {
   UINTN Index;
@@ -55,28 +58,31 @@ STATIC VOID Emit (CONST CHAR8 *Text, UINTN Length) {
       if (C == '\n') { continue; }
     }
     if (C < 0x20 || C > 0x7E) { C = '.'; }
-    AsciiPrint ("%c", C);
+    AsciiPrint ("%c", (CHAR16)(UINT8)C);
     mColumn++;
   }
 }
 
-// A bootloader-owned window need not be covered by the firmware's static map,
-// and a translation fault would take the whole boot down, so probe first and
-// only map when the read would fault.
-STATIC EFI_STATUS MakeReadable (UINT64 Address, UINTN Size) {
-  UINT64 Base, End, Page, El, Par;
-  if (Address < SIZE_1MB || Size == 0 || Address >= LShiftU64 (1, 48) ||
-      Size > LShiftU64 (1, 48) - Address) { return EFI_INVALID_PARAMETER; }
-  Base = Address & ~((UINT64)EFI_PAGE_SIZE - 1);
-  End = ALIGN_VALUE (Address + Size, EFI_PAGE_SIZE);
+/**
+  Report whether one page of the window is readable at the current exception
+  level, using AT so an unmapped page is a PAR result and not a data abort.
+
+  @param[in] Address  Page address to probe.
+
+  @retval TRUE   The page translates.
+  @retval FALSE  The page does not translate, or this EL cannot ask.
+**/
+STATIC BOOLEAN Readable (UINT64 Address) {
+  UINT64 El, Par;
   __asm__ volatile ("mrs %0, CurrentEL" : "=r" (El));
-  for (Page = Base; Page < End; Page += EFI_PAGE_SIZE) {
-    if (El == 4) { __asm__ volatile ("at s1e1r, %1; isb; mrs %0, par_el1" : "=r" (Par) : "r" (Page) : "memory"); }
-    else if (El == 8) { __asm__ volatile ("at s1e2r, %1; isb; mrs %0, par_el1" : "=r" (Par) : "r" (Page) : "memory"); }
-    else { return EFI_UNSUPPORTED; }
-    if ((Par & 1) != 0) { return ArmSetMemoryAttributes (Base, End - Base, EFI_MEMORY_WB | EFI_MEMORY_XP, 0); }
+  if (El == 4) {
+    __asm__ volatile ("at s1e1r, %1; isb; mrs %0, par_el1" : "=r" (Par) : "r" (Address) : "memory");
+  } else if (El == 8) {
+    __asm__ volatile ("at s1e2r, %1; isb; mrs %0, par_el1" : "=r" (Par) : "r" (Address) : "memory");
+  } else {
+    return FALSE;
   }
-  return EFI_SUCCESS;
+  return (BOOLEAN)((Par & 1) == 0);
 }
 
 /**
@@ -89,30 +95,29 @@ STATIC EFI_STATUS MakeReadable (UINT64 Address, UINTN Size) {
 **/
 EFI_STATUS
 EFIAPI
-RamoopsDumpEntry (
+RamoopsDumpInner (
   IN EFI_HANDLE        ImageHandle,
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
-  EFI_STATUS     Status;
-  RAMOOPS_HEADER Header;
+  RAMOOPS_HDR Header;
   CONST CHAR8    *Data;
   UINT32         Start, Size, First, Second;
 
-  Status = MakeReadable (RAMOOPS_PHYS_BASE, RAMOOPS_BYTES);
-  if (EFI_ERROR (Status)) {
-    AsciiPrint ("RAMOOPS: cannot read 0x%lx (%r)\n", (UINT64)RAMOOPS_PHYS_BASE, Status);
+  if (!Readable (RAMOOPS_PHYS_BASE)) {
+    AsciiPrint ("RAMOOPS: 0x%lx does not translate here, nothing to report\n",
+                (UINT64)RAMOOPS_PHYS_BASE);
     return EFI_SUCCESS;
   }
 
   CopyMem (&Header, (VOID *)(UINTN)RAMOOPS_PHYS_BASE, sizeof (Header));
   if (Header.Sig != RAMOOPS_MAGIC) {
-    AsciiPrint ("RAMOOPS: no signature at 0x%lx (read 0x%x), the window is empty\n",
+    AsciiPrint ("RAMOOPS: no signature at 0x%lx (read 0x%08x), the window is empty\n",
                 (UINT64)RAMOOPS_PHYS_BASE, Header.Sig);
     return EFI_SUCCESS;
   }
   if (Header.Size > RAMOOPS_DATA || Header.Start >= RAMOOPS_DATA) {
-    AsciiPrint ("RAMOOPS: signature found but header is out of range (start 0x%x size 0x%x)\n",
+    AsciiPrint ("RAMOOPS: signature found but the header is out of range (start 0x%x size 0x%x)\n",
                 Header.Start, Header.Size);
     return EFI_SUCCESS;
   }
@@ -153,5 +158,42 @@ RamoopsDumpEntry (
     }
   }
   AsciiPrint ("\nRAMOOPS: end of mirror\n");
+  return EFI_SUCCESS;
+}
+
+/**
+  Keep the text on screen long enough for a human to read it.
+
+  The kernel has no console yet, so this dump is the only instrument we have and
+  it exists for twelve seconds during a manual boot.  A key press ends the wait.
+**/
+VOID
+RamoopsHold (
+  VOID
+  )
+{
+  EFI_INPUT_KEY  Key;
+  UINTN          Left;
+
+  AsciiPrint ("RAMOOPS: holding this screen for 20 s (press a key to continue)\n");
+  for (Left = 0; Left < 20; Left++) {
+    gBS->Stall (1000 * 1000);
+    if ((gST->ConIn != NULL) &&
+        (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key) == EFI_SUCCESS))
+    {
+      break;
+    }
+  }
+}
+
+EFI_STATUS
+EFIAPI
+RamoopsDumpEntry (
+  IN EFI_HANDLE        ImageHandle,
+  IN EFI_SYSTEM_TABLE  *SystemTable
+  )
+{
+  RamoopsDumpInner (ImageHandle, SystemTable);
+  RamoopsHold ();
   return EFI_SUCCESS;
 }

@@ -575,6 +575,15 @@ FillScreen (
   for (Index = 0; Index < Pixels; Index++) {
     Row[Index] = Colour;
   }
+  //
+  // The loader runs with the MMU and data cache on.  Without this the pixels sit
+  // in cache, nothing reaches the panel, and the hand-off looks like a dead
+  // screen even though this code ran.
+  //
+  for (Index = 0; Index < Pixels * sizeof (UINT32); Index += 64) {
+    __asm__ __volatile__ ("dc civac, %0" :: "r" ((UINTN)Row + Index) : "memory");
+  }
+  __asm__ __volatile__ ("dsb sy" ::: "memory");
   return;
 }
 
@@ -1052,6 +1061,7 @@ Boot (
       CpuDeadLoop ();
     }
     FillScreen (Video, 0x00FF0000);
+    HandoffStage (Video, L"PRE EXIT", 0);
     HandoffStage (Video, L"EXIT CALL", Attempt);
     Status = gBS->ExitBootServices (mImage, Key);
     HandoffStage (Video, L"EXIT RETURN", Status);
