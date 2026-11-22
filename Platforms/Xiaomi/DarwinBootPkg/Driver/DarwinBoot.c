@@ -1053,23 +1053,22 @@ Boot (
   DEBUG ((DEBUG_ERROR, "owned trampoline pa 0x%lx (%lu bytes)\n", TrampolineAddress, (UINT64)TrampolineBytes));
   DEBUG ((DEBUG_ERROR, "\nExiting boot services. A green bar means the loader\ntrampoline ran; payload entry is not yet confirmed.\n"));
   //
-  // The same three facts through the console the menu already draws with, not
-  // through the frame-buffer serial port. On this board the direct writes to
-  // Video[0] are the ones that go missing (the red fill and the green bar are
-  // both drawn that way and neither reached the panel, while menu text did),
-  // so this block is the control: if it shows up, the display still works up
-  // to ExitBootServices and the loss is on the other side of the hand-off.
+  // The same three facts through ConOut, not through direct Video[0]
+  // writes. The graphics menu draws via GOP Blt directly (Ui.c) and
+  // ConOut is only its text-mode fallback, but ConOut is a distinct
+  // rendering path from DiagDrawVideo / FillScreen / HandoffStage, so
+  // this block is the control: if it shows up, the display still works
+  // up to ExitBootServices and the loss is on the other side of the
+  // hand-off. Entry words stay in the DEBUG block above, which the
+  // Advanced Logger captures.
   //
   {
     CHAR16 Buffer[160];
     UnicodeSPrint (Buffer, sizeof (Buffer),
-                   L"HANDOFF va=0x%lx entry=0x%lx video=0x%lx\r\n"
-                   L"entry words %08x %08x %08x %08x\r\n",
-                   Kernel.Base, Address + Kernel.Entry - Kernel.Base, Video[0],
-                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base)),
-                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 4)),
-                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 8)),
-                   ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 12)));
+                   L"HANDOFF VA=0x%lx\r\n"
+                   L"ENTRY PA=0x%lx\r\n"
+                   L"VIDEO BASE=0x%lx\r\n",
+                   Kernel.Base, Address + Kernel.Entry - Kernel.Base, Video[0]);
     gST->ConOut->OutputString (gST->ConOut, Buffer);
   }
   for (Attempt = 0; Attempt < 3; Attempt++) {
