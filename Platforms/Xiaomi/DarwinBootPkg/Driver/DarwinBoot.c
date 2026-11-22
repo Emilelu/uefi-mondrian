@@ -549,45 +549,6 @@ DiagDraw (CONST CHAR16 *Text, UINTN Row)
 }
 
 /**
-  Paint the whole frame buffer one colour.
-
-  Used as a witness right before ExitBootServices: if the screen goes red here and
-  never goes green in the trampoline, the panel stopped displaying at the hand-off
-  instead of the code failing to run.  Those two need different fixes and a black
-  screen cannot tell them apart.
-**/
-STATIC
-VOID
-FillScreen (
-  IN CONST UINT64  Video[6],
-  IN UINT32        Colour
-  )
-{
-  UINT32  *Row;
-  UINTN    Pixels;
-  UINTN    Index;
-
-  if (Video[0] == 0 || Video[2] == 0 || Video[4] == 0) {
-    return;
-  }
-  Pixels = (UINTN)(Video[2] / 4) * (UINTN)Video[4];
-  Row    = (UINT32 *)(UINTN)Video[0];
-  for (Index = 0; Index < Pixels; Index++) {
-    Row[Index] = Colour;
-  }
-  //
-  // The loader runs with the MMU and data cache on.  Without this the pixels sit
-  // in cache, nothing reaches the panel, and the hand-off looks like a dead
-  // screen even though this code ran.
-  //
-  for (Index = 0; Index < Pixels * sizeof (UINT32); Index += 64) {
-    __asm__ __volatile__ ("dc civac, %0" :: "r" ((UINTN)Row + Index) : "memory");
-  }
-  __asm__ __volatile__ ("dsb sy" ::: "memory");
-  return;
-}
-
-/**
   Paint the whole screen through the firmware's GOP Blt, which is the call the
   graphics menu draws with.
 
@@ -634,6 +595,47 @@ GopFillBar (
   may stop the boot; a missing protocol or a refused blit prints one line and
   returns to the hand-off.
 **/
+/**
+  Leave four quadrants on the panel through GOP Blt.
+
+  This is the last picture before the hand-off and the only three-way
+  discriminator available without a console: the quadrants survive
+  ExitBootServices and the kernel writes nothing -> the panel is alive and the
+  kernel never reached its console; the screen goes black -> the display dies at
+  ExitBootServices, which is firmware's problem, not the kernel's; anything else
+  -> the kernel reached its console and we have our channel back.
+
+  Drawn with Blt because that is the one call with a proven record here: the
+  menu uses it and shows, while every direct write into Video[0] (FillScreen,
+  the trampoline's green bar, the DiagDraw stage text) has reached the panel
+  zero times in four flights.
+**/
+STATIC
+VOID
+GopQuadrants (VOID)
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Green = { 0x00, 0xFF, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Yellow = { 0x00, 0xFF, 0xFF, 0 };
+  UINTN                          Width, Height;
+
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL) || (Gop->Mode->Info == NULL)) {
+    return;
+  }
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+  if ((Width < 2) || (Height < 2)) {
+    return;
+  }
+  GopFillBar (Gop, Green, 0, Width);
+  GopFillBar (Gop, Yellow, 0, Width / 2);
+  gBS->Stall (1000000);
+  DEBUG ((DEBUG_ERROR, "GOP QUADRANTS: blitted %lux%lu, then the hand-off\n", Width, Height));
+}
+
 STATIC
 VOID
 GopWitness (VOID)
@@ -1183,11 +1185,15 @@ Boot (
       if (Attempt == 0) { goto Fail; }
       CpuDeadLoop ();
     }
-    FillScreen (Video, 0x00FF0000);
-    HandoffStage (Video, L"PRE EXIT", 0);
-    HandoffStage (Video, L"EXIT CALL", Attempt);
+    //
+    // The last picture goes through Blt.  FillScreen, HandoffStage and the
+    // trampoline's green bar all write Video[0] directly and none of them has
+    // ever reached this panel; drawing them here only hides the Blt picture
+    // underneath.  If the quadrants are still on screen after the hand-off, the
+    // display survived ExitBootServices and the kernel is what never wrote.
+    //
+    GopQuadrants ();
     Status = gBS->ExitBootServices (mImage, Key);
-    HandoffStage (Video, L"EXIT RETURN", Status);
     if (!EFI_ERROR (Status)) {
       // All writes by this loader are in [Address, Address + Used): Mach-O
       // segments/BSS, args, ADT, initrd, trustcache and copied trampoline.

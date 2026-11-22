@@ -175,15 +175,16 @@ RamoopsHold (
   EFI_INPUT_KEY  Key;
   UINTN          Left;
 
-  AsciiPrint ("RAMOOPS: holding this screen for 20 s (press a key to continue)\n");
-  for (Left = 0; Left < 20; Left++) {
-    gBS->Stall (1000 * 1000);
-    if ((gST->ConIn != NULL) &&
-        (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key) == EFI_SUCCESS))
-    {
-      break;
-    }
-  }
+  //
+  // No hold.  This used to stall twenty seconds on every boot so a human could
+  // read the mirror, and the Advanced Logger capture shows it as the only
+  // twenty-second gap in the whole boot (01:24:42.671 -> 01:25:02.685).  The
+  // mirror it reads is the firmware's own 0x43455343 zone, not the kernel's
+  // 0x43474244 ring, so the screen is worth no wait at all; the dump stays in
+  // the log and the boot continues.
+  //
+  (VOID)Key;
+  (VOID)Left;
 }
 
 EFI_STATUS
