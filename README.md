@@ -1,5 +1,12 @@
 # uefi-mondrian
 
+## 接手 / Handoff
+
+- [`HANDOFF.md`](HANDOFF.md) —— 本仓库职责与交接入口
+- [移植总方案](https://github.com/Emilelu/UniXNU-mondrian/blob/main/docs/engineering/PORTING-PLAN.md)
+- [工作流](https://github.com/Emilelu/UniXNU-mondrian/blob/main/docs/engineering/WORKFLOW.md)
+
+
 Redmi K60（代号 **mondrian**，高通 **SM8475**）的 UEFI 固件，用于 UniXNU 移植。
 派生自 Project-Silicium / Mu-Silicium；平台包位于 `Platforms/Xiaomi/mondrianPkg`。
 
