@@ -4,8 +4,8 @@
 
 #include <Base.h>
 
-// XNU 8796.141.3 / Darwin 22 pexpert/pexpert/arm64/boot.h ABI.
-#define DARWIN_BOOT_LINE_LENGTH 608
+// XNU 12377 / Darwin 23 pexpert/pexpert/arm64/boot.h ABI.
+#define DARWIN_BOOT_LINE_LENGTH 1024
 typedef struct {
   UINT16  Revision;
   UINT16  Version;
@@ -28,8 +28,8 @@ typedef struct {
 STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, DeviceTree) == 0x60, "DT ABI");
 STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, Video) == 0x28, "video ABI");
 STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, CommandLine) == 0x6c, "command line ABI");
-STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, BootFlags) == 0x2d0, "flags ABI");
-STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, MemorySizeActual) == 0x2d8, "memory ABI");
-STATIC_ASSERT (sizeof (DARWIN_BOOT_ARGS) == 0x2e0, "Darwin 22 boot_args ABI");
+STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, BootFlags) == 0x470, "flags ABI");
+STATIC_ASSERT (OFFSET_OF (DARWIN_BOOT_ARGS, MemorySizeActual) == 0x478, "memory ABI");
+STATIC_ASSERT (sizeof (DARWIN_BOOT_ARGS) == 0x480, "Darwin 23 boot_args ABI");
 
 #endif

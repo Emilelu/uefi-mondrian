@@ -9,10 +9,11 @@ ASM_FUNC(DarwinCurrentEl)
 // PA (0 for none), x5=its size in bytes. EL1 only.
 ASM_FUNC(DarwinEnter)
   msr daifset, #15
-  // Breadcrumb: a green bar (BGRA 0xFF00FF00) over the top 1/16 of the frame
-  // buffer shows that this code ran, whatever the kernel does afterwards.
+  // Breadcrumb: the whole frame buffer goes green (BGRA 0xFF00FF00) if this code
+  // ran at all. A full screen instead of a bar, because a black screen after the
+  // hand-off could not be told apart from a bar that was never drawn.
   cbz x4, 2f
-  lsr x9, x5, #4
+  mov x9, x5
   bic x9, x9, #7
   mov w10, #0xFF00
   movk w10, #0xFF00, lsl #16
@@ -24,7 +25,7 @@ ASM_FUNC(DarwinEnter)
   dsb sy
   // Make this breadcrumb visible even if the following transition faults.
   mov x11, x4
-  lsr x9, x5, #4
+  mov x9, x5
   add x9, x9, x4
   mrs x10, ctr_el0
   ubfx x10, x10, #16, #4

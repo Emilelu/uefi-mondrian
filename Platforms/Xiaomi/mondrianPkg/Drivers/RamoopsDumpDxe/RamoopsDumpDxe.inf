@@ -1,0 +1,25 @@
+[Defines]
+  INF_VERSION    = 0x0001001B
+  BASE_NAME      = RamoopsDumpDxe
+  FILE_GUID      = 2C4E6A19-5B7D-4F03-9E28-6D1A0C5B8E44
+  MODULE_TYPE    = DXE_DRIVER
+  VERSION_STRING = 0.1
+  ENTRY_POINT    = RamoopsDumpEntry
+
+[Sources]
+  RamoopsDumpDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  ArmPkg/ArmPkg.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  PrintLib
+  UefiDriverEntryPoint
+  UefiLib
+
+[Depex]
+  TRUE

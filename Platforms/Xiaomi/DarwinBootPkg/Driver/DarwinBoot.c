@@ -16,6 +16,7 @@
 #include "BootVideo.h"
 #include "PackedRamdisk.h"
 #include "WindowSize.h"
+#include "../Library/ImageCarrierLib/ImageCarrierLib.h"
 
 #define WINDOW_SIZE  SIZE_256MB
 #define BLOCK_SIZE   SIZE_2MB
@@ -127,7 +128,7 @@ Done:
 
 STATIC
 EFI_STATUS
-ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
+ParseKernelHeader (CONST UINT8 *Data, UINTN Size, UINTN Header, KERNEL *Kernel)
 {
   UINTN    Offset;
   UINTN    End;
@@ -140,15 +141,25 @@ ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
   BOOLEAN  HasEntry;
   BOOLEAN  Executable;
 
-  if ((Size < 32) || (U32 (Data) != 0xfeedfacf) || (U32 (Data + 4) != 0x100000c) ||
-      (U32 (Data + 8) != 0) || (U32 (Data + 12) != 2)) {
+  //
+  // Header is where the image starts inside Data: 0 for a kernel that is a
+  // single image, and the LC_FILESET_ENTRY offset for a member of a
+  // collection. Every bound below is relative to Header, so Size - Header is
+  // tested before it is used and never underflows.
+  //
+  if ((Header > Size) || (Size - Header < 32) ||
+      (U32 (Data + Header) != 0xfeedfacf) || (U32 (Data + Header + 4) != 0x100000c) ||
+      (((U32 (Data + Header + 8) & 0x00ffffff) != 0) &&
+       ((U32 (Data + Header + 8) & 0x00ffffff) != 2)) ||
+      ((U32 (Data + Header + 12) != 2) &&
+       ((Header != 0) || (U32 (Data + Header + 12) != 12)))) {
     return EFI_UNSUPPORTED;
   }
-  if (U32 (Data + 20) > Size - 32) { return EFI_LOAD_ERROR; }
+  if (U32 (Data + Header + 20) > Size - Header - 32) { return EFI_LOAD_ERROR; }
   ZeroMem (Kernel, sizeof (*Kernel));
-  Count = U32 (Data + 16);
-  End = 32 + U32 (Data + 20);
-  Offset = 32;
+  Count = U32 (Data + Header + 16);
+  End = Header + 32 + U32 (Data + Header + 20);
+  Offset = Header + 32;
   HasEntry = FALSE;
   for (Index = 0; Index < Count; Index++) {
     if (End - Offset < 8) { return EFI_LOAD_ERROR; }
@@ -195,6 +206,106 @@ ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
       (Kernel->Base > MAX_UINT64 - WINDOW_SIZE) ||
       (Kernel->End - Kernel->Base > WINDOW_SIZE - SIZE_2MB)) { return EFI_LOAD_ERROR; }
   return EFI_SUCCESS;
+}
+
+//
+// From the 27 collection on, the kernel is an MH_FILESET (filetype 12): the
+// collection only describes the address space, and every real image hangs off
+// an LC_FILESET_ENTRY command that names it and gives its header offset. XNU
+// itself is the "com.apple.kernel" member.
+//
+// The collection's own segments are the roots that already cover the member,
+// so they stay the copy plan; the member is parsed only to prove that the
+// roots really do map it, at the address it advertises, before the loader
+// copies a byte.
+//
+STATIC
+EFI_STATUS
+ParseKernel (CONST UINT8 *Data, UINTN Size, KERNEL *Kernel)
+{
+  EFI_STATUS Status;
+  KERNEL     Member;
+  UINTN      Offset;
+  UINTN      End;
+  UINTN      Header;
+  UINTN      Name;
+  UINTN      Index;
+  UINTN      Other;
+  UINT32     Length;
+  BOOLEAN    Found;
+  BOOLEAN    Covered;
+  SEGMENT    *Child;
+  SEGMENT    *Parent;
+
+  Status = ParseKernelHeader (Data, Size, 0, Kernel);
+  if (EFI_ERROR (Status) || (U32 (Data + 12) != 12)) { return Status; }
+  Offset = 32;
+  End = 32 + U32 (Data + 20);
+  Found = FALSE;
+  while (Offset < End) {
+    //
+    // ParseKernelHeader() has just proved that this list is well formed and
+    // that walking it lands exactly on End. Check it again here anyway: a
+    // command with Length 0 spins this loop forever, and a command that
+    // overruns the list reads past End - and past the buffer when End is Size.
+    //
+    if (End - Offset < 8) { return EFI_LOAD_ERROR; }
+    Length = U32 (Data + Offset + 4);
+    if ((Length < 8) || (Length & 7) || (Length > End - Offset)) { return EFI_LOAD_ERROR; }
+    if (U32 (Data + Offset) == 0x80000035) {
+      if (Length < 40) { return EFI_LOAD_ERROR; }
+      Name = U32 (Data + Offset + 24);
+      if ((Name < 32) || (Name >= Length)) { return EFI_LOAD_ERROR; }
+      for (Index = Name; (Index < Length) && (Data[Offset + Index] != 0); Index++) {}
+      if (Index == Length) { return EFI_LOAD_ERROR; }
+      Header = U64 (Data + Offset + 16);
+      if ((Header > Size) || (Size - Header < 32) || (Header & 7)) { return EFI_LOAD_ERROR; }
+      //
+      // Every indexed header must be loaded at the virtual address it claims:
+      // that is the property the loader's copy loop relies on.
+      //
+      Covered = FALSE;
+      for (Other = 0; Other < Kernel->Count; Other++) {
+        Parent = &Kernel->Segments[Other];
+        if ((Header >= Parent->FileOffset) &&
+            (Header - Parent->FileOffset <= Parent->FileSize) &&
+            (32 <= Parent->FileSize - (Header - Parent->FileOffset)) &&
+            (U64 (Data + Offset + 8) == Parent->Address + Header - Parent->FileOffset)) {
+          Covered = TRUE;
+        }
+      }
+      if (!Covered) { return EFI_LOAD_ERROR; }
+      if ((Index - Name == sizeof ("com.apple.kernel") - 1) &&
+          (CompareMem (Data + Offset + Name, "com.apple.kernel", sizeof ("com.apple.kernel")) == 0)) {
+        if (Found || (U32 (Data + Header + 12) != 2) ||
+            (U32 (Data + Header + 8) != U32 (Data + 8)) ||
+            ((U32 (Data + Header + 24) & 0x80000000) == 0)) { return EFI_LOAD_ERROR; }
+        Found = TRUE;
+        Status = ParseKernelHeader (Data, Size, Header, &Member);
+        if (EFI_ERROR (Status) || (Member.Entry != Kernel->Entry)) { return EFI_LOAD_ERROR; }
+        for (Index = 0; Index < Member.Count; Index++) {
+          Child = &Member.Segments[Index];
+          Covered = FALSE;
+          for (Other = 0; Other < Kernel->Count; Other++) {
+            Parent = &Kernel->Segments[Other];
+            if ((Child->Address >= Parent->Address) &&
+                (Child->Address - Parent->Address <= Parent->Size) &&
+                (Child->Size <= Parent->Size - (Child->Address - Parent->Address)) &&
+                ((Child->Protection & ~Parent->Protection) == 0) &&
+                ((Child->FileSize == 0) ||
+                 ((Child->Address - Parent->Address <= Parent->FileSize) &&
+                  (Child->FileSize <= Parent->FileSize - (Child->Address - Parent->Address)) &&
+                  (Child->FileOffset == Parent->FileOffset + Child->Address - Parent->Address)))) {
+              Covered = TRUE;
+            }
+          }
+          if (!Covered) { return EFI_LOAD_ERROR; }
+        }
+      }
+    }
+    Offset += Length;
+  }
+  return Found ? EFI_SUCCESS : EFI_LOAD_ERROR;
 }
 
 STATIC UINTN mAudioDmaOffset = MAX_UINTN;
@@ -437,6 +548,192 @@ DiagDraw (CONST CHAR16 *Text, UINTN Row)
   if (!EFI_ERROR (ReadBootVideo (Video)) && Video[0]) { DiagDrawVideo (Text, Row, Video); }
 }
 
+/**
+  Paint the whole screen through the firmware's GOP Blt, which is the call the
+  graphics menu draws with.
+
+  Every direct write into Video[0] from this loader has so far reached the panel
+  zero times, while the menu - drawn with Blt - is shown normally.  Blt is
+  therefore the only drawing call with a proven record on this board, so the
+  hand-off witness has to go through it instead of through FillScreen.
+**/
+STATIC
+EFI_STATUS
+GopFill (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop,
+  IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Colour
+  )
+{
+  return Gop->Blt (Gop, &Colour, EfiBltVideoFill, 0, 0, 0, 0,
+                   Gop->Mode->Info->HorizontalResolution,
+                   Gop->Mode->Info->VerticalResolution, 0);
+}
+
+/**
+  The same fill restricted to one vertical bar; used for the striped frame.
+**/
+STATIC
+EFI_STATUS
+GopFillBar (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop,
+  IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Colour,
+  IN UINTN                          X,
+  IN UINTN                          Width
+  )
+{
+  return Gop->Blt (Gop, &Colour, EfiBltVideoFill, 0, 0, X, 0, Width,
+                   Gop->Mode->Info->VerticalResolution, 0);
+}
+
+/**
+  Draw a ruler the panel cannot fake: four bars on the four edges of the mode
+  the firmware believes it has, plus a cross at its centre.  If the bars hug the
+  panel edges the GOP geometry matches the visible area; if a bar floats inside
+  the panel the mode is wider or taller than the glass.
+
+  The cross is drawn as two thin Blt fills so it needs no font.
+**/
+STATIC
+VOID
+GopRuler (
+  VOID
+  )
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Blue    = { 0xFF, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red     = { 0x00, 0x00, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Yellow  = { 0x00, 0xFF, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Green   = { 0x00, 0xFF, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Magenta = { 0xFF, 0x00, 0xFF, 0 };
+  UINTN                          Width, Height;
+
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL)) {
+    return;
+  }
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+
+  /* left blue, right red */
+  GopFillBar (Gop, Blue, 0, 8);
+  GopFillBar (Gop, Red, (Width > 8) ? (Width - 8) : 0, 8);
+  /* top yellow, bottom green, drawn as horizontal fills */
+  Gop->Blt (Gop, &Yellow, EfiBltVideoFill, 0, 0, 0, 0, Width, 8, 0);
+  if (Height > 8) {
+    Gop->Blt (Gop, &Green, EfiBltVideoFill, 0, 0, 0, Height - 8, Width, 8, 0);
+  }
+  /* centre cross: one vertical bar and one horizontal bar, both magenta */
+  GopFillBar (Gop, Magenta, Width / 2, 8);
+  Gop->Blt (Gop, &Magenta, EfiBltVideoFill, 0, 0, 0, Height / 2, Width, 8, 0);
+  gBS->Stall (3000000);
+  DEBUG ((DEBUG_ERROR, "GOP RULER: width %lu height %lu pitch %lu base 0x%lx\n",
+          Width, Height, Gop->Mode->Info->PixelsPerScanLine,
+          Gop->Mode->FrameBufferBase));
+}
+
+/**
+  The hand-off witness, drawn the way the menu draws: red, then blue, then eight
+  black and white bars, one second each, and the bars held for two more seconds.
+
+  Three different pictures rather than one, because a single colour cannot be
+  told apart from the last frame the menu left behind: red -> blue -> bars can
+  only happen if Blt ran three times and the panel followed it.  Nothing here
+  may stop the boot; a missing protocol or a refused blit prints one line and
+  returns to the hand-off.
+**/
+/**
+  Leave four quadrants on the panel through GOP Blt.
+
+  This is the last picture before the hand-off and the only three-way
+  discriminator available without a console: the quadrants survive
+  ExitBootServices and the kernel writes nothing -> the panel is alive and the
+  kernel never reached its console; the screen goes black -> the display dies at
+  ExitBootServices, which is firmware's problem, not the kernel's; anything else
+  -> the kernel reached its console and we have our channel back.
+
+  Drawn with Blt because that is the one call with a proven record here: the
+  menu uses it and shows, while every direct write into Video[0] (FillScreen,
+  the trampoline's green bar, the DiagDraw stage text) has reached the panel
+  zero times in four flights.
+**/
+STATIC
+VOID
+GopQuadrants (VOID)
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Green = { 0x00, 0xFF, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Yellow = { 0x00, 0xFF, 0xFF, 0 };
+  UINTN                          Width, Height;
+
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL) || (Gop->Mode->Info == NULL)) {
+    return;
+  }
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+  if ((Width < 2) || (Height < 2)) {
+    return;
+  }
+  GopFillBar (Gop, Green, 0, Width);
+  GopFillBar (Gop, Yellow, 0, Width / 2);
+  gBS->Stall (1000000);
+  DEBUG ((DEBUG_ERROR, "GOP QUADRANTS: blitted %lux%lu, then the hand-off\n", Width, Height));
+}
+
+STATIC
+VOID
+GopWitness (VOID)
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL   *Gop;
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Red   = { 0x00, 0x00, 0xFF, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Blue  = { 0xFF, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Black = { 0x00, 0x00, 0x00, 0 };
+  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  White = { 0xFF, 0xFF, 0xFF, 0 };
+  CHAR16                         Line[128];
+  UINTN                          Width, Height, Bar, X, Next;
+
+  Gop = NULL;
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&Gop);
+  if (EFI_ERROR (Status) || (Gop == NULL) || (Gop->Mode == NULL) || (Gop->Mode->Info == NULL)) {
+    UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: no graphics output protocol (%r), nothing drawn\r\n", Status);
+    gST->ConOut->OutputString (gST->ConOut, Line);
+    DEBUG ((DEBUG_ERROR, "GOP WITNESS: no graphics output protocol, nothing drawn\n"));
+    return;
+  }
+  Width  = Gop->Mode->Info->HorizontalResolution;
+  Height = Gop->Mode->Info->VerticalResolution;
+  UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: blt %lux%lu, red blue bars\r\n", Width, Height);
+  gST->ConOut->OutputString (gST->ConOut, Line);
+  DEBUG ((DEBUG_ERROR, "GOP WITNESS: blt mode %u %lux%lu\n", (UINT32)Gop->Mode->Mode, Width, Height));
+
+  Status = GopFill (Gop, Red);
+  if (EFI_ERROR (Status)) {
+    UnicodeSPrint (Line, sizeof (Line), L"GOP WITNESS: blt refused (%r), continuing to the hand-off\r\n", Status);
+    gST->ConOut->OutputString (gST->ConOut, Line);
+    return;
+  }
+  gBS->Stall (1000000);
+  GopFill (Gop, Blue);
+  gBS->Stall (1000000);
+  GopFill (Gop, Black);
+  if (Width >= 8) {
+    for (Bar = 1; Bar < 8; Bar += 2) {
+      X    = (Width / 8) * Bar;
+      Next = (Bar == 7) ? Width : (Width / 8) * (Bar + 1);
+      GopFillBar (Gop, White, X, Next - X);
+    }
+  }
+  gBS->Stall (1000000);
+  gBS->Stall (2000000);
+  DEBUG ((DEBUG_ERROR, "GOP WITNESS: red, blue and the eight bars were blitted\n"));
+  return;
+}
+
 STATIC
 VOID
 HandoffStage (CONST UINT64 Video[6], CONST CHAR16 *Text, UINT64 Status)
@@ -663,6 +960,8 @@ Boot (
   UINTN                           OwnedCount = 0;
   CONST CHAR16                    *Stage = L"REQUEST";
   CHAR16                          Failure[96];
+  IMAGE_CARRIER                   Carrier;
+  UINTN                           CarrierOffset;
 
   (VOID)This;
   if ((Request == NULL) || (Request->Volume == NULL) || (Request->KernelPath == NULL)) { return EFI_INVALID_PARAMETER; }
@@ -720,6 +1019,17 @@ Boot (
   Stage = L"PARSE ADT";
   if (!AdtNode (Tree, TreeSize, &Offset, 0, 3, &RamdiskOffset, &TrustCacheOffset, &WindowSize, &KeepPacked) || (Offset != TreeSize)) { Status = EFI_COMPROMISED_DATA; goto Fail; }
   if (KeepPacked && (!RamdiskPacked || (RamdiskOffset == MAX_UINTN))) { Status = EFI_COMPROMISED_DATA; goto Fail; }
+  //
+  // The modem carrier goes in before the ramdisk and trustcache checks so a
+  // malformed ADT is still reported first; the carveout is reserved memory,
+  // not a Boot Services resource, so nothing here needs unwinding on failure.
+  //
+  Stage = L"MODEM CARRIER";
+  Status = ImageCarrierLoad (Root, Tree, TreeSize, &Carrier, &CarrierOffset);
+  if (EFI_ERROR (Status)) { goto Fail; }
+  Stage = L"IPA IMAGE";
+  Status = ImageIpaLoad (Root, &Carrier);
+  if (EFI_ERROR (Status)) { goto Fail; }
   if (WindowSize == 0) { WindowSize = WINDOW_SIZE; }
   if (Kernel.Base > MAX_UINT64 - WindowSize) { Status = EFI_LOAD_ERROR; goto Fail; }
   if (Request->Ramdisk != NULL) {
@@ -799,6 +1109,23 @@ Boot (
   Args->DeviceTreeLength = (UINT32)TreeSize;
   CopyMem (Args->CommandLine, CommandLine, sizeof (CommandLine));
   CopyMem ((VOID *)(UINTN)TreeAddress, Tree, TreeSize);
+  Print (L"modem-image: chosen dtb at 0x%016lx\n", TreeAddress);
+  Print (L"modem-image: window 0x8bc00000..0x9ee00000\n");
+  Print (L"modem-image: abl staging ends at 0x%016lx\n", Carrier.AblEnd);
+  if (Carrier.Files != 0) {
+    //
+    // Read the placeholder back out of the copy XNU will parse, so a tree that
+    // lost the property between the library and the handoff is caught here
+    // instead of in the kernel.
+    //
+    if ((ReadUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + CarrierOffset)) != Carrier.Base) ||
+        (ReadUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + CarrierOffset + 8)) != Carrier.Span)) {
+      Status = EFI_COMPROMISED_DATA;
+      goto Fail;
+    }
+    Print (L"modem-image: K60ModemImage holds 0x%016lx..0x%016lx\n", Carrier.Base, Carrier.Base + Carrier.Span);
+    Print (L"modem-image: range 0x8bc00000..0x9ee00000 published as K60ModemImage\n");
+  }
   if (mAudioDmaOffset != MAX_UINTN) {
     WriteUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + mAudioDmaOffset), AudioAddress);
     WriteUnaligned64 ((UINT64 *)(UINTN)(TreeAddress + mAudioDmaOffset + 8), AudioAddress ? 65536 : 0);
@@ -872,6 +1199,32 @@ Boot (
   DEBUG ((DEBUG_ERROR, "ID_AA64PFR0_EL1  0x%lx\n", READ_SYSREG (id_aa64pfr0_el1)));
   DEBUG ((DEBUG_ERROR, "owned trampoline pa 0x%lx (%lu bytes)\n", TrampolineAddress, (UINT64)TrampolineBytes));
   DEBUG ((DEBUG_ERROR, "\nExiting boot services. A green bar means the loader\ntrampoline ran; payload entry is not yet confirmed.\n"));
+  //
+  // The same three facts through ConOut, not through direct Video[0]
+  // writes. The graphics menu draws via GOP Blt directly (Ui.c) and
+  // ConOut is only its text-mode fallback, but ConOut is a distinct
+  // rendering path from DiagDrawVideo / FillScreen / HandoffStage, so
+  // this block is the control: if it shows up, the display still works
+  // up to ExitBootServices and the loss is on the other side of the
+  // hand-off. Entry words stay in the DEBUG block above, which the
+  // Advanced Logger captures.
+  //
+  {
+    CHAR16 Buffer[160];
+    UnicodeSPrint (Buffer, sizeof (Buffer),
+                   L"HANDOFF VA=0x%lx\r\n"
+                   L"ENTRY PA=0x%lx\r\n"
+                   L"VIDEO BASE=0x%lx\r\n",
+                   Kernel.Base, Address + Kernel.Entry - Kernel.Base, Video[0]);
+    gST->ConOut->OutputString (gST->ConOut, Buffer);
+  }
+  //
+  // Last picture before the hand-off, through the menu's own drawing call: red,
+  // blue, then eight bars, five seconds in total.  Direct writes have been
+  // invisible here three times; if these frames show, Blt is the difference and
+  // the panel is still alive at ExitBootServices.
+  //
+  GopWitness ();
   for (Attempt = 0; Attempt < 3; Attempt++) {
     MapSize = Capacity;
     Status = gBS->GetMemoryMap (&MapSize, Map, &Key, &Stride, &Version);
@@ -880,9 +1233,16 @@ Boot (
       if (Attempt == 0) { goto Fail; }
       CpuDeadLoop ();
     }
-    HandoffStage (Video, L"EXIT CALL", Attempt);
+    //
+    // The last picture goes through Blt.  FillScreen, HandoffStage and the
+    // trampoline's green bar all write Video[0] directly and none of them has
+    // ever reached this panel; drawing them here only hides the Blt picture
+    // underneath.  If the quadrants are still on screen after the hand-off, the
+    // display survived ExitBootServices and the kernel is what never wrote.
+    //
+    GopRuler ();
+  GopQuadrants ();
     Status = gBS->ExitBootServices (mImage, Key);
-    HandoffStage (Video, L"EXIT RETURN", Status);
     if (!EFI_ERROR (Status)) {
       // All writes by this loader are in [Address, Address + Used): Mach-O
       // segments/BSS, args, ADT, initrd, trustcache and copied trampoline.

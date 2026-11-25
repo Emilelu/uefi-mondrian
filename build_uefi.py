@@ -31,6 +31,14 @@ RESOURCE_DTBS_PATH    = Path ("Resources/DTBs")
 RESOURCE_PATCHES_PATH = Path ("Resources/MuPatches")
 RESOURCE_SCRIPTS_PATH = Path ("Resources/Scripts")
 
+# Patches whose change has since landed in Mu_Basecore itself. At the current pin
+# (6f805f2) they no longer apply, and they must not be forced back in by pinning an
+# older basecore. Verified with `git apply --check` at 6f805f2: every other patch in
+# Resources/MuPatches still applies.
+UPSTREAMED_PATCHES = frozenset ({
+    "AsmMacroLib.patch",   # ASM_FUNC section naming; Mu_Basecore now guards it with #ifdef __ELF__
+})
+
 #
 # MU Submodule Paths
 #
@@ -299,9 +307,25 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
 
     # Check DTB Append Flag
     if image_kernel_config.get ("append_dtb"):
-        # Verify DTB Path
-        if not device_dtb.is_file ():
-            logger.error (f"The Device DTB is Missing in \"{RESOURCE_DTBS_PATH}\"!")
+        # Verify DTB Path and Size
+        #
+        # A missing DTB here used to be reported as a missing file and then
+        # dropped on the floor: the FD had already been built, but the boot image
+        # was never produced, so the only way out was to copy the FD out of
+        # Build/.../FV by hand.  The check now names the real problem, and it
+        # refuses an empty or truncated file as well, because a zero-byte
+        # Resources/DTBs/<board>.dtb would otherwise be appended silently.
+        if not device_dtb.is_file () or device_dtb.stat ().st_size <= 1024:
+            config_file = RESOURCE_CONFIGS_PATH / f"{ctx.device}.toml"
+            logger.error (
+                f"\"{device_dtb}\" is missing or smaller than 1 KiB, but "
+                f"[boot_image_kernel] append_dtb is true in \"{config_file}\"."
+            )
+            logger.error (
+                "This is not a missing file: append_dtb is on, so the boot image "
+                "has to carry a device tree. Compile it with dtc from the board "
+                "source (see Resources/DTBs/MANIFEST.md) and commit the result."
+            )
             return False
 
         # Append DTB
@@ -325,12 +349,22 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
     output_file_name = f"Mu-{ctx.device}-{ctx.device_model}.img" if add_output_suffix else f"Mu-{ctx.device}.img"
 
     # Set Base mkbootimg Command
+    #
+    # The ramdisk is optional.  This script packages the UEFI firmware only, and
+    # the tree has never carried a "Resources/ramdisk"; passing the path
+    # unconditionally made mkbootimg.py abort with
+    # "can't open 'Resources/ramdisk'" after the FD had already been built, so
+    # no boot image came out at all.  mkbootimg.py treats an absent ramdisk as
+    # zero bytes (filesize () -> 0) and writes a zero ramdisk_size, which is a
+    # valid header v4 image.
+    ramdisk_path = Path ("Resources/ramdisk")
     cmd = [
         sys.executable, str (mkbootimg),
         "--kernel",     str (android_kernel),
-        "--ramdisk",    "Resources/ramdisk",
-        "-o",           output_file_name
     ]
+    if ramdisk_path.is_file ():
+        cmd += ["--ramdisk", str (ramdisk_path)]
+    cmd += ["-o", output_file_name]
 
     # mkbootimg Argument Map
     argument_map = {
@@ -508,6 +542,12 @@ def main ():
     # Apply Mu_Basecore Patches
     for patch_name in ["AsmMacroLib.patch", "Auth-Service.patch", "Boot-Manager.patch", "Timer.patch", "Usb-Bus.patch", "K60-Exception-Image.patch"]:
         if not handle_git_patch (MU_BASECORE_PATH, patch_name, False):
+            if patch_name in UPSTREAMED_PATCHES:
+                # The fix now lives in Mu_Basecore itself, so the local patch no longer
+                # applies. Skipping is correct: reverting to an older basecore to keep an
+                # obsolete patch alive is what breaks the firmware.
+                logger.warning (f"\"{patch_name}\" is already upstream at this Mu_Basecore revision; skipping")
+                continue
             logger.error (f"Failed to Apply \"{patch_name}\" Git Patch!")
             sys.exit (1)
 
